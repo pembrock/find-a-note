@@ -13,7 +13,7 @@ Find a Note is a desktop sight-reading trainer. See a note on the staff and play
 
 ## Platform and stack
 
-The current target is **Windows 10 or 11, x64**, with Microsoft Edge WebView2 Runtime. macOS is planned. The app uses Go and Wails v2 for the desktop shell, React and TypeScript for the interface, VexFlow for notation, Tone.js and Web Audio for playback, and WinMM for native MIDI input.
+The current target is **Windows 10 or 11, x64**, with Microsoft Edge WebView2 Runtime. A local Apple Silicon macOS build is available for the virtual piano and training; CoreMIDI and macOS distribution are not yet implemented. See the [MAC-01 validation report](docs/macos/MAC-01-APP.md). The app uses Go and Wails v2 for the desktop shell, React and TypeScript for the interface, VexFlow for notation, Tone.js and Web Audio for playback, and WinMM for native MIDI input.
 
 ## Build from source
 
@@ -39,6 +39,27 @@ go vet ./...
 ```
 
 The Playwright tests use Microsoft Edge and start a local Vite server. The frontend build generates the files required by the Go embed directive.
+
+## Local macOS build (Apple Silicon)
+
+With Xcode Command Line Tools and the same Go, Node and Wails prerequisites:
+
+```sh
+export PATH="$(go env GOPATH)/bin:$PATH"
+wails doctor
+(cd frontend && npm ci && npm run build && npm test)
+go test ./...
+go vet ./...
+wails dev
+# Quit the development app before building production.
+CGO_ENABLED=1 wails build -platform darwin/arm64
+```
+
+Open `build/bin/find-a-note.app` in Finder. The stable bundle identifier is
+`io.github.pembrock.findanote`; both bundle versions follow `wails.json`.
+The local bundle uses ad hoc signing. It is not a distributed or notarized release.
+Only macOS 27.2.1 has been exercised; the 11.0 deployment target is not a tested
+minimum. MIDI input and automatic updates remain unavailable on macOS.
 
 ## License and attribution
 

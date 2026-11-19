@@ -69,6 +69,7 @@ declare global {
       WindowMinimise: () => void;
       WindowToggleMaximise: () => void;
       Quit: () => void;
+      Environment?: () => Promise<{ platform: string }>;
     };
   }
 }
@@ -163,6 +164,12 @@ function Staff({ note, settings }: { note: number; settings: Settings }) {
 }
 function App() {
   const { t, language } = useLanguage();
+  const [nativeFrame, setNativeFrame] = useState(false);
+  useEffect(() => {
+    void window.runtime?.Environment?.().then(({ platform }) => {
+      setNativeFrame(platform === "darwin");
+    });
+  }, []);
   const [custom, setS] = useState(() =>
     loadSettings({ minimum: 0, maximum: 127 }),
   );
@@ -514,25 +521,29 @@ function App() {
           <button title={t("settings")} onClick={() => setOpen(!open)}>
             <Gear />
           </button>
-          <button
-            title={t("minimize")}
-            onClick={() => window.runtime?.WindowMinimise()}
-          >
-            <Minus />
-          </button>
-          <button
-            title={t("maximize")}
-            onClick={() => window.runtime?.WindowToggleMaximise()}
-          >
-            <Square size={17} />
-          </button>
-          <button
-            className="close"
-            title={t("close")}
-            onClick={() => window.runtime?.Quit()}
-          >
-            <X />
-          </button>
+          {!nativeFrame && (
+            <>
+              <button
+                title={t("minimize")}
+                onClick={() => window.runtime?.WindowMinimise()}
+              >
+                <Minus />
+              </button>
+              <button
+                title={t("maximize")}
+                onClick={() => window.runtime?.WindowToggleMaximise()}
+              >
+                <Square size={17} />
+              </button>
+              <button
+                className="close"
+                title={t("close")}
+                onClick={() => window.runtime?.Quit()}
+              >
+                <X />
+              </button>
+            </>
+          )}
         </div>
       </header>
       <div className="workspace">
