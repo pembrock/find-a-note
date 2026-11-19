@@ -1,0 +1,48 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+.update-panel {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.update-panel p {
+  margin: 0;
+}
+
+.update-panel button {
+  justify-self: start;
+  padding: 5px 8px;
+  color: #eee7ff;
+  border: 1px solid #726593;
+  border-radius: 6px;
+  background: #292440;
+  font: inherit;
+}
+
+.update-panel button:disabled {
+  opacity: 0.55;
+}
+
+.update-notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 9em;
+  overflow: auto;
+}
+
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.update-panel progress {
+  display: block;
+  width: 100%;
+  accent-color: #a477ef;
+}
+
+.window-actions .update-badge {
+  color: #c5a6ff;
+}

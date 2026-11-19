@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
 	"os"
 	"path/filepath"
+	"sonari/internal/update"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -16,8 +18,17 @@ import (
 var assets embed.FS
 
 func main() {
+	version, err := update.ParseVersion(product.Version)
+	if err != nil {
+		log.Fatal(err)
+	}
+	key := update.PublicKey()
+	if update.RunHelper(os.Args[1:], version, key) {
+		return
+	}
 	app := &App{}
-	err := wails.Run(&options.App{
+	updater := &UpdateBridge{version: version}
+	err = wails.Run(&options.App{
 		Title: product.Name, Width: 900, Height: 600, MinWidth: 760, MinHeight: 560,
 		Frameless: true, BackgroundColour: &options.RGBA{R: 16, G: 17, B: 30, A: 255},
 		// Windows DWM owns the outer shape, border and shadow. WebView fills it
@@ -35,9 +46,15 @@ func main() {
 			},
 		},
 		AssetServer: &assetserver.Options{Assets: assets},
-		OnStartup:   app.startup,
-		OnShutdown:  app.shutdown,
-		Bind:        []interface{}{app},
+		OnStartup: func(ctx context.Context) {
+			app.startup(ctx)
+			updater.startup(ctx)
+		},
+		OnShutdown: func(ctx context.Context) {
+			updater.shutdown()
+			app.shutdown(ctx)
+		},
+		Bind: []interface{}{app, updater},
 	})
 	if err != nil {
 		log.Fatal(err)

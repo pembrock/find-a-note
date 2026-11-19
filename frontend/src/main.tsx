@@ -25,6 +25,7 @@ import {
   ArrowUpDown,
   SlidersHorizontal,
   Settings as Gear,
+  Download,
 } from "lucide-react";
 import {
   describe,
@@ -51,6 +52,7 @@ import { MIDIDeviceMenu } from "./MIDIDeviceMenu";
 import { useCalibration } from "./useCalibration";
 import { CalibrationWizard } from "./CalibrationWizard";
 import { SettingsSection, useSettingsSections } from "./SettingsSection";
+import { UpdatePanel, useUpdates } from "./updates";
 import { profileRange } from "./calibration";
 import {
   loadTraining,
@@ -158,6 +160,8 @@ function App() {
   const s = trainingSettings(custom, training);
   const [note, setNote] = useState(() => trainingNote(s, training));
   const [open, setOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const updates = useUpdates();
   const sections = useSettingsSections();
   const [keys, setKeys] = useState(true);
   const [keyLabels, setKeyLabels] = useState(() => {
@@ -485,6 +489,19 @@ function App() {
             ))}
         </div>
         <div className="window-actions">
+          {updates.notify && (
+            <button
+              className="update-badge"
+              title="Обновления Find a Note"
+              aria-label="Обновления Find a Note"
+              onClick={() => {
+                setOpen(true);
+                setAboutOpen(true);
+              }}
+            >
+              <Download size={17} />
+            </button>
+          )}
           <button title="Настройки" onClick={() => setOpen(!open)}>
             <Gear />
           </button>
@@ -795,11 +812,16 @@ function App() {
                   Не удалось сохранить настройки на этом устройстве.
                 </p>
               )}
-              <details className="settings-section">
+              <details
+                className="settings-section"
+                open={aboutOpen}
+                onToggle={(event) => setAboutOpen(event.currentTarget.open)}
+              >
                 <summary>О программе</summary>
                 <p className="settings-note">
                   {product.productName} · Версия {product.productVersion}
                 </p>
+                <UpdatePanel update={updates} />
               </details>
             </div>
           </aside>

@@ -29,8 +29,21 @@ VIAddVersionKey "FileVersion" "${INFO_PRODUCTVERSION}"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
+Var UpdateStage
 Function .onInit
     !insertmacro wails.checkArchitecture
+    ${GetParameters} $0
+    ClearErrors
+    ${GetOptions} $0 "/UPDATESTAGE" $1
+    IfErrors normalInstall
+    StrCpy $UpdateStage "1"
+    SetSilent silent
+    IfFileExists "$INSTDIR\.find-a-note-stage" stageAllowed
+    SetErrorLevel 2
+    Abort
+stageAllowed:
+    Return
+normalInstall:
     SetRegView 64
     ReadRegStr $0 HKCU "${UNINST_KEY}" "InstallLocation"
     ${If} $0 != ""
@@ -40,6 +53,18 @@ FunctionEnd
 
 Section "Find a Note"
     SectionIn RO
+    ${If} $UpdateStage == "1"
+        SetOutPath "$INSTDIR"
+        SetOverwrite off
+        ClearErrors
+        !insertmacro wails.files
+        IfErrors stageFailed
+        SetErrorLevel 0
+        Quit
+stageFailed:
+        SetErrorLevel 3
+        Abort
+    ${EndIf}
     SetShellVarContext current
     !insertmacro wails.webview2runtime
     SetOutPath "$INSTDIR"

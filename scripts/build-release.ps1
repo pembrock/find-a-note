@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$SigningKey,
+    [string]$UpdateNotes
+)
 
 $ErrorActionPreference = 'Stop'
 function Invoke-Checked {
@@ -23,6 +26,11 @@ try {
     $portable = "$base-Portable.exe"
     $exe = "$($config.outputfilename).exe"
     $output = New-Item -ItemType Directory -Force "artifacts/windows-$version"
+    foreach ($metadataFile in 'update-manifest.json', 'update-manifest.sig') {
+        $metadataPath = Join-Path $output.FullName $metadataFile
+        if (Test-Path -LiteralPath $metadataPath) { Remove-Item -LiteralPath $metadataPath }
+    }
+    if ($UpdateNotes -and !$SigningKey) { throw 'UpdateNotes requires an external SigningKey.' }
 
     Push-Location frontend
     try {
@@ -52,5 +60,10 @@ try {
         "$($hash.Hash.ToLowerInvariant())  $file"
     }
     $checksums | Set-Content -Encoding ascii (Join-Path $output.FullName 'SHA256SUMS.txt')
+    if ($SigningKey) {
+        $sign = @('run', './cmd/update-manifest', '-key', $SigningKey, '-version', $version, '-dir', $output.FullName)
+        if ($UpdateNotes) { $sign += @('-notes', $UpdateNotes) }
+        Invoke-Checked go $sign
+    }
     Get-ChildItem -LiteralPath $output.FullName
 } finally { Pop-Location }
