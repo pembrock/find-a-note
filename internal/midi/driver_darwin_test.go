@@ -49,7 +49,12 @@ func TestCoreMIDIVirtualSource(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { stdin.Close(); cmd.Wait() })
+	t.Cleanup(func() {
+		stdin.Close()
+		if err := cmd.Wait(); err != nil {
+			t.Errorf("fixture shutdown: %v", err)
+		}
+	})
 	replies := make(chan string, 1)
 	go func() {
 		scanner := bufio.NewScanner(stdout)
@@ -86,7 +91,8 @@ func TestCoreMIDIVirtualSource(t *testing.T) {
 	}
 	const identity = "coremidi:1702987654"
 	events := make(chan Event, 32)
-	m := New(&NativeDriver{}, func(name string, value any) {
+	driver := &NativeDriver{}
+	m := New(driver, func(name string, value any) {
 		if name == "midi:note" {
 			events <- value.(Event)
 		}
@@ -138,5 +144,41 @@ func TestCoreMIDIVirtualSource(t *testing.T) {
 	case event := <-events:
 		t.Fatalf("event after disconnect: %+v", event)
 	case <-time.After(100 * time.Millisecond):
+	}
+	m.Shutdown()
+	if driver.client != 0 {
+		t.Fatal("client retained after shutdown")
+	}
+	darwinReceivers.Range(func(key, value any) bool {
+		t.Errorf("receiver token %v retained after shutdown", key)
+		return true
+	})
+	// Keep the source process and endpoint alive: this isolates production
+	// client recreation from fixture startup, disposal and UniqueID reuse.
+	nextDriver := &NativeDriver{}
+	next := New(nextDriver, func(name string, value any) {
+		if name == "midi:note" {
+			events <- value.(Event)
+		}
+	})
+	t.Cleanup(next.Shutdown)
+	state := wait(next, func(s State) bool {
+		for _, d := range s.Devices {
+			if d == device || d.Identity == identity && d.Name == device.Name {
+				device = d
+				return true
+			}
+		}
+		return false
+	})
+	t.Logf("recreated client endpoints: %+v", state.Devices)
+	connected = next.Connect(device.ID)
+	if connected.Status != "connected" {
+		t.Fatal(connected)
+	}
+	checkNotes(connected.Session)
+	next.Shutdown()
+	if nextDriver.client != 0 {
+		t.Fatal("recreated client retained after shutdown")
 	}
 }

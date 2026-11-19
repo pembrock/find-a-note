@@ -2,6 +2,7 @@
 #include <CoreMIDI/CoreMIDI.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 int main(void) {
     MIDIClientRef client;
@@ -25,8 +26,17 @@ int main(void) {
         } else {
             return 7;
         }
+        if (getenv("FIND_A_NOTE_MIDI_TRACE")) {
+            SInt32 unique = 0;
+            OSStatus status = source ? MIDIObjectGetIntegerProperty(source, kMIDIPropertyUniqueID, &unique) : 0;
+            fprintf(stderr, "fixture command=%s client=%u source=%u unique=%d status=%d\n", command, client, source, unique, status);
+        }
         puts("OK");
         fflush(stdout);
     }
-    return MIDIClientDispose(client) != 0;
+    if (source && MIDIEndpointDispose(source)) return 8;
+    OSStatus status = MIDIClientDispose(client);
+    if (getenv("FIND_A_NOTE_MIDI_TRACE"))
+        fprintf(stderr, "fixture dispose-client=%u status=%d\n", client, status);
+    return status != 0;
 }

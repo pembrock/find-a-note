@@ -8,6 +8,8 @@ package midi
 #include <CoreMIDI/CoreMIDI.h>
 #include <stdint.h>
 void fanPollRunLoop(void);
+OSStatus fanDisposeClient(MIDIClientRef client);
+OSStatus fanDisposePort(MIDIPortRef port);
 OSStatus fanCreateClient(MIDIClientRef *client);
 OSStatus fanCreatePort(MIDIClientRef client, MIDIPortRef *port, uintptr_t token);
 int fanSourceName(MIDIEndpointRef source, char *name, CFIndex size);
@@ -17,6 +19,8 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -26,17 +30,38 @@ import (
 
 type NativeDriver struct{ client C.MIDIClientRef }
 
-func (driver *NativeDriver) List() ([]Device, error) {
-	if driver.client == 0 {
-		// CoreMIDI associates its notification run loop with the first client.
-		// Manager serializes List, Open and Close on this goroutine.
+// CoreMIDI keeps the run loop of the FIRST MIDIClientCreate in the process,
+// even after that client is disposed. Keep that thread alive across managers;
+// locking each manager separately allows the next one to poll the wrong loop.
+var darwinRunLoop = sync.OnceValue(func() chan func() {
+	requests := make(chan func())
+	go func() {
 		runtime.LockOSThread()
-		var client C.MIDIClientRef
-		if err := midiStatus("create client", C.fanCreateClient(&client)); err != nil {
-			runtime.UnlockOSThread()
+		for request := range requests {
+			request()
+		}
+	}()
+	return requests
+})
+
+func onDarwinRunLoop(fn func()) {
+	done := make(chan struct{})
+	darwinRunLoop() <- func() { fn(); close(done) }
+	<-done
+}
+
+func (driver *NativeDriver) List() ([]Device, error) {
+	var devices []Device
+	var err error
+	onDarwinRunLoop(func() { devices, err = driver.listOnRunLoop() })
+	return devices, err
+}
+
+func (driver *NativeDriver) listOnRunLoop() ([]Device, error) {
+	if driver.client == 0 {
+		if err := midiStatus("create client", C.fanCreateClient(&driver.client)); err != nil {
 			return nil, err
 		}
-		driver.client = client
 	}
 	C.fanPollRunLoop()
 	devices := []Device{}
@@ -180,13 +205,14 @@ func (input *darwinInput) Close() error {
 	if input.started {
 		// A removed endpoint may already be disconnected. Disposing the port
 		// below releases every remaining connection.
-		C.MIDIPortDisconnectSource(input.port, input.source)
+		status := C.MIDIPortDisconnectSource(input.port, input.source)
+		_ = midiStatus("disconnect source", status)
 		input.started = false
 	}
 	if input.port == 0 {
 		return nil
 	}
-	err := midiStatus("dispose port", C.MIDIPortDispose(input.port))
+	err := midiStatus("dispose port", C.fanDisposePort(input.port))
 	if err == nil {
 		input.port = 0
 	}
@@ -197,15 +223,18 @@ func (driver *NativeDriver) Close() error {
 	if driver.client == 0 {
 		return nil
 	}
-	err := midiStatus("dispose client", C.MIDIClientDispose(driver.client))
+	var err error
+	onDarwinRunLoop(func() { err = midiStatus("dispose client", C.fanDisposeClient(driver.client)) })
 	if err == nil {
 		driver.client = 0
-		runtime.UnlockOSThread()
 	}
 	return err
 }
 
 func midiStatus(operation string, status C.OSStatus) error {
+	if os.Getenv("FIND_A_NOTE_MIDI_TRACE") != "" {
+		log.Printf("CoreMIDI %s status=%d", operation, int32(status))
+	}
 	if status == 0 {
 		return nil
 	}

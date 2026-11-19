@@ -2,6 +2,21 @@
 
 #include <CoreMIDI/CoreMIDI.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+
+static void fanTrace(const char *op, unsigned object, int status) {
+    if (!getenv("FIND_A_NOTE_MIDI_TRACE")) return;
+    uint64_t thread = 0;
+    pthread_threadid_np(NULL, &thread);
+    fprintf(stderr, "CoreMIDI %s object=%u status=%d thread=%llu loop=%p\n",
+        op, object, status, (unsigned long long)thread, CFRunLoopGetCurrent());
+}
+
+static void fanNotify(const MIDINotification *message, void *ref) {
+    fanTrace("notification", message->messageID, 0);
+}
 #include "_cgo_export.h"
 
 OSStatus fanCreatePort(MIDIClientRef client, MIDIPortRef *port, uintptr_t token) {
@@ -28,12 +43,16 @@ OSStatus fanCreatePort(MIDIClientRef client, MIDIPortRef *port, uintptr_t token)
 }
 
 OSStatus fanCreateClient(MIDIClientRef *client) {
-    return MIDIClientCreate(CFSTR("Find a Note"), NULL, NULL, client);
+    OSStatus status = MIDIClientCreate(CFSTR("Find a Note"), fanNotify, NULL, client);
+    fanTrace("create-client", *client, status);
+    return status;
 }
 
 int fanSourceName(MIDIEndpointRef source, char *name, CFIndex size) {
     CFStringRef value = NULL;
-    if (MIDIObjectGetStringProperty(source, kMIDIPropertyDisplayName, &value) != noErr || !value)
+    OSStatus status = MIDIObjectGetStringProperty(source, kMIDIPropertyDisplayName, &value);
+    fanTrace("display-name", source, status);
+    if (status != noErr || !value)
         return 0;
     int ok = CFStringGetCString(value, name, size, kCFStringEncodingUTF8);
     CFRelease(value);
@@ -41,5 +60,17 @@ int fanSourceName(MIDIEndpointRef source, char *name, CFIndex size) {
 }
 
 void fanPollRunLoop(void) {
-    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.001, false);
+    SInt32 result = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.001, false);
+    fanTrace("poll", 0, result);
+}
+
+OSStatus fanDisposeClient(MIDIClientRef client) {
+    OSStatus status = MIDIClientDispose(client);
+    fanTrace("dispose-client", client, status);
+    return status;
+}
+OSStatus fanDisposePort(MIDIPortRef port) {
+    OSStatus status = MIDIPortDispose(port);
+    fanTrace("dispose-port", port, status);
+    return status;
 }
