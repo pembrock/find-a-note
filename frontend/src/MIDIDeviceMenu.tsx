@@ -1,17 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Keyboard, ChevronUp, ChevronDown, RotateCcw } from "lucide-react";
 import { describe } from "./model";
 import { useMidi } from "./useMidi";
 import type { useCalibration } from "./useCalibration";
+import { SoundToggle, type useAudio } from "./useAudio";
+import { audio } from "./audio";
 
 export function MIDIDeviceMenu({
   midi,
   calibration,
+  sound,
 }: {
   midi: ReturnType<typeof useMidi>;
   calibration: ReturnType<typeof useCalibration>;
+  sound: ReturnType<typeof useAudio>;
 }) {
   const [open, setOpen] = useState(false);
+  const soundDescription = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const { state, pending, last, warning, select, refresh } = midi;
@@ -105,7 +110,10 @@ export function MIDIDeviceMenu({
                 key={device.id}
                 disabled={pending}
                 aria-pressed={connected && state.selected?.id === device.id}
-                onClick={() => select(device)}
+                onClick={() => {
+                  void audio.activate();
+                  void select(device);
+                }}
               >
                 <span aria-hidden="true">
                   {connected && state.selected?.id === device.id ? "●" : "○"}
@@ -120,6 +128,14 @@ export function MIDIDeviceMenu({
               </button>
             ))}
           </div>
+          {connected && (
+            <div className="midi-sound">
+              <SoundToggle sound={sound} descriptionId={soundDescription} />
+              <p id={soundDescription} className="settings-note">
+                Воспроизводить звук нажатых клавиш через динамики компьютера.
+              </p>
+            </div>
+          )}
           {state.message && (
             <p role="alert" className="midi-message">
               {state.message}

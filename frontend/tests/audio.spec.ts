@@ -103,6 +103,16 @@ async function prepare(page: Page) {
       });
     (window as any).__connect = (id: string) =>
       (window as any).go.main.App.ConnectMIDI(id);
+    (window as any).__usb = (present: boolean) => {
+      state = {
+        ...state,
+        devices: present ? devices : devices.filter((d) => d.id !== "0"),
+        status: "virtual",
+        selected: null,
+        session: String(Number(state.session) + 1),
+      };
+      publish();
+    };
     localStorage.setItem(
       "sonari.midi.calibration.v1",
       JSON.stringify({
@@ -176,8 +186,7 @@ test("MIDI audio remains independent of answers, polyphony, source preferences a
   await prepare(page);
   await page.evaluate(() => (window as any).__connect("0"));
   const toggle = page.getByRole("switch", { name: "Воспроизводить звук" });
-  await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
   const starts = await count(page, "start");
   await page.evaluate(() => {
     for (const n of [60, 64, 67]) (window as any).__audioMidi("noteon", n);
@@ -187,7 +196,7 @@ test("MIDI audio remains independent of answers, polyphony, source preferences a
   await page.evaluate(() => (window as any).__audioMidi("noteoff", 64, 0));
   await expect.poll(() => count(page, "stop")).toBe(stops + 1);
   await page.evaluate(() => (window as any).__connect("1"));
-  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
   await expect.poll(() => count(page, "stop")).toBe(stops + 3);
   await page.evaluate(() => (window as any).__connect("0"));
   await expect(toggle).toHaveAttribute("aria-checked", "true");
@@ -222,7 +231,6 @@ test("velocity, held correct answer, focus loss and silent calibration", async (
 }) => {
   await prepare(page);
   await page.evaluate(() => (window as any).__connect("0"));
-  await page.getByRole("switch", { name: "Воспроизводить звук" }).click();
   const attack = async (velocity: number) =>
     page.evaluate((velocity) => {
       (window as any).__audioLog.length = 0;
@@ -259,7 +267,7 @@ test("sound settings fit supported window sizes", async ({ page }) => {
   for (const [width, height] of [
     [900, 600],
     [760, 560],
-    [1600, 1000],
+    [1920, 1032],
   ]) {
     await page.setViewportSize({ width, height });
     await expect(page.getByRole("slider", { name: "Громкость" })).toBeVisible();
@@ -268,9 +276,6 @@ test("sound settings fit supported window sizes", async ({ page }) => {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await page.screenshot({
-      path: `../screenshots/audio-01-${width}x${height}.png`,
-    });
   }
 });
 
@@ -279,7 +284,6 @@ test("accordion does not release held MIDI audio or change connection and calibr
 }) => {
   await prepare(page);
   await page.evaluate(() => (window as any).__connect("0"));
-  await page.getByRole("switch", { name: "Воспроизводить звук" }).click();
   await page.evaluate(() => (window as any).__audioMidi("noteon", 64));
   const stops = await count(page, "stop");
   const before = await page.evaluate(async () => ({
@@ -299,4 +303,48 @@ test("accordion does not release held MIDI audio or change connection and calibr
   ).toEqual(before);
   await page.evaluate(() => (window as any).__audioMidi("noteoff", 64, 0));
   await expect.poll(() => count(page, "stop")).toBe(stops + 1);
+});
+
+test("MIDI sound controls share per-device state across USB and reload", async ({ page }, testInfo) => {
+  await prepare(page);
+  const trigger = page.getByRole("button", { name: "Устройство ввода", exact: true });
+  const menu = page.getByRole("dialog", { name: "Устройство ввода" });
+  const quick = menu.getByRole("switch", { name: "Воспроизводить звук" });
+  const settings = page.locator("aside").getByRole("switch", { name: "Воспроизводить звук" });
+  await trigger.click();
+  await menu.getByRole("button", { name: "SE25", exact: true }).click();
+  await expect(quick).toHaveAttribute("aria-checked", "true");
+  for (const [width, height] of [[760, 560], [900, 600], [1920, 1032]]) {
+    await page.setViewportSize({ width, height });
+    await expect(quick).toBeInViewport();
+    if (width === 900) await page.screenshot({ path: testInfo.outputPath("midi-menu.png") });
+  }
+
+  await quick.click();
+  await expect(settings).toHaveAttribute("aria-checked", "false");
+  const starts = await count(page, "start");
+  await page.evaluate(() => (window as any).__audioMidi("noteon", 60));
+  expect(await count(page, "start")).toBe(starts);
+  await menu.getByRole("button", { name: "Yamaha P-45", exact: true }).click();
+  await expect(quick).toHaveAttribute("aria-checked", "true");
+  await menu.getByRole("button", { name: "SE25", exact: true }).click();
+  await expect(quick).toHaveAttribute("aria-checked", "false");
+
+  await page.evaluate(() => (window as any).__usb(false));
+  await expect(quick).toHaveCount(0);
+  await page.evaluate(() => (window as any).__usb(true));
+  await expect(quick).toHaveAttribute("aria-checked", "false");
+  await page.reload();
+  await expect(trigger).toContainText("SE25");
+  await trigger.click();
+  await expect(quick).toHaveAttribute("aria-checked", "false");
+
+  await page.getByRole("button", { name: "Настройки", exact: true }).first().click();
+  await settings.click();
+  await trigger.click();
+  await expect(quick).toHaveAttribute("aria-checked", "true");
+  await page.reload();
+  await expect(trigger).toContainText("SE25");
+  await trigger.click();
+  await expect(quick).toHaveAttribute("aria-checked", "true");
 });

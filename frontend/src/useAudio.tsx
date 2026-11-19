@@ -45,9 +45,7 @@ export function useAudio(state: MIDIState, calibrating: boolean) {
   const [saveError, setSaveError] = useState(false);
   const status = useSyncExternalStore(audio.subscribe, audio.snapshot);
   const source = audioSource(state);
-  // Physical instruments require an explicit choice;
-  // the device name is never evidence that an instrument has no sound engine.
-  const enabled = preferences.sources[source] ?? source === "virtual";
+  const enabled = preferences.sources[source] ?? true;
   useLayoutEffect(() => {
     audio.allNotesOff();
     audio.setEnabled("virtual", preferences.sources.virtual ?? true);
@@ -124,18 +122,21 @@ export function useAudio(state: MIDIState, calibrating: boolean) {
   };
 }
 
-export function AudioSettings({
+export function SoundToggle({
   sound,
+  descriptionId,
 }: {
-  sound: ReturnType<typeof useAudio>;
+  sound: Pick<ReturnType<typeof useAudio>, "enabled" | "toggle">;
+  descriptionId?: string;
 }) {
   return (
-    <>
       <div className="toggle-row">
         <span>Воспроизводить звук</span>
         <button
+          type="button"
           role="switch"
           aria-label="Воспроизводить звук"
+          aria-describedby={descriptionId}
           aria-checked={sound.enabled}
           className={"switch " + (sound.enabled ? "on" : "")}
           onClick={sound.toggle}
@@ -143,6 +144,17 @@ export function AudioSettings({
           <span />
         </button>
       </div>
+  );
+}
+
+export function AudioSettings({
+  sound,
+}: {
+  sound: ReturnType<typeof useAudio>;
+}) {
+  return (
+    <>
+      <SoundToggle sound={sound} />
       <label className="audio-volume">
         Громкость <output>{sound.volume}%</output>
         <input

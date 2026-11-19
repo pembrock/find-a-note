@@ -944,7 +944,7 @@ function App() {
         )}
       </div>
       <footer>
-        <MIDIDeviceMenu midi={midi} calibration={calibration} />
+        <MIDIDeviceMenu midi={midi} calibration={calibration} sound={sound} />
         {sound.enabled && sound.status === "locked" && (
           <button onClick={() => void audio.activate()}>Включить звук</button>
         )}
