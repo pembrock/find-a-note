@@ -1,0 +1,14 @@
+Salamander Grand Piano — Yamaha C5 acoustic grand piano samples
+Author: Alexander Holm
+Source distribution: https://github.com/Tonejs/audio/tree/master/salamander
+Source license notice: UPSTREAM-README.txt (retained verbatim)
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+https://creativecommons.org/licenses/by/3.0/
+Full license: LICENSE.txt
+
+Find a Note bundles the 30 MP3 files from the Tone.js distribution unchanged.
+This is a reduced, single dynamic layer selection of the original library,
+not the complete multi-layer Salamander sound bank. Intermediate notes are
+repitched at playback; velocity scales amplitude. No endorsement is implied.
+Downloaded 2026-11-15. SHA256.json records the exact bundled audio files.
+These audio files retain their own license, independently of the application code.

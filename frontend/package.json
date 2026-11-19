@@ -1,0 +1,29 @@
+{
+  "name": "find-a-note",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "test": "tsx --test src/model.test.ts",
+    "test:ui": "playwright test"
+  },
+  "dependencies": {
+    "@radix-ui/react-select": "^2.3.8",
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tone": "^15.1.22",
+    "vexflow": "4.2.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "prettier": "3.6.2",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3",
+    "vite": "^6.4.0"
+  }
+}
