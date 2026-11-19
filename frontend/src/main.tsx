@@ -52,7 +52,7 @@ import { MIDIDeviceMenu } from "./MIDIDeviceMenu";
 import { useCalibration } from "./useCalibration";
 import { CalibrationWizard } from "./CalibrationWizard";
 import { SettingsSection, useSettingsSections } from "./SettingsSection";
-import { UpdatePanel, useUpdates } from "./updates";
+import { UpdateDialog, UpdateNotice, useUpdates } from "./updates";
 import { profileRange } from "./calibration";
 import {
   loadTraining,
@@ -494,10 +494,7 @@ function App() {
               className="update-badge"
               title="Обновления Find a Note"
               aria-label="Обновления Find a Note"
-              onClick={() => {
-                setOpen(true);
-                setAboutOpen(true);
-              }}
+              onClick={updates.show}
             >
               <Download size={17} />
             </button>
@@ -821,12 +818,18 @@ function App() {
                 <p className="settings-note">
                   {product.productName} · Версия {product.productVersion}
                 </p>
-                <UpdatePanel update={updates} />
+                {updates.enabled && (
+                  <button className="update-check" onClick={updates.check}>
+                    Проверить обновления
+                  </button>
+                )}
               </details>
             </div>
           </aside>
         )}
       </div>
+      <UpdateDialog update={updates} />
+      <UpdateNotice update={updates} />
       <div className={"piano-panel " + (!keys ? "collapsed" : "")}>
         <div className="piano-toolbar">
           <div className="piano-heading">

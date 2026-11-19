@@ -122,6 +122,8 @@ func VerifyManifest(data, signature []byte, key ed25519.PublicKey) (Manifest, er
 	return m, nil
 }
 
+var errPackageIntegrity = errors.New("update package integrity check failed")
+
 func (p Package) ValidateStream(r io.Reader) error {
 	h := sha256.New()
 	n, err := io.Copy(h, io.LimitReader(r, p.Size+1))
@@ -129,7 +131,7 @@ func (p Package) ValidateStream(r io.Reader) error {
 		return err
 	}
 	if n != p.Size || hex.EncodeToString(h.Sum(nil)) != p.SHA256 {
-		return errors.New("update package integrity check failed")
+		return errPackageIntegrity
 	}
 	return nil
 }

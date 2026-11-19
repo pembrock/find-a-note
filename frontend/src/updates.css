@@ -1,48 +1,131 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-.update-panel {
-  display: grid;
-  gap: 8px;
-  margin: 8px 0;
-  font-size: 12px;
+.update-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: hidden;
+  color: #eee7ff;
+  background: #201b30;
+  border: 1px solid #5e4e7b;
+  border-radius: 14px;
+  box-shadow: 0 18px 60px #0a0713aa;
 }
 
-.update-panel p {
+.update-dialog::backdrop {
+  background: #0b0815a8;
+}
+
+.update-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(100dvh - 34px);
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.update-shell h2,
+.update-shell h3,
+.update-shell p,
+.update-notice p {
   margin: 0;
 }
 
-.update-panel button {
-  justify-self: start;
-  padding: 5px 8px;
-  color: #eee7ff;
-  border: 1px solid #726593;
-  border-radius: 6px;
-  background: #292440;
-  font: inherit;
+.update-shell h2 {
+  font-size: 19px;
+}
+.update-shell h3 {
+  font-size: 13px;
+}
+.update-shell .update-version {
+  margin-top: 4px;
+  color: #d4b7ff;
+}
+.update-muted,
+.update-notice p {
+  color: #c2b7d6;
 }
 
-.update-panel button:disabled {
-  opacity: 0.55;
+.update-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  font-size: 13px;
+}
+.update-body:empty {
+  display: none;
 }
 
 .update-notes {
+  min-height: 0;
+  max-height: min(220px, 45dvh);
+  padding: 9px 11px;
+  overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 9em;
-  overflow: auto;
+  user-select: text;
+  background: #171323;
+  border-radius: 7px;
 }
 
 .update-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.update-panel progress {
-  display: block;
+.update-dialog button,
+.update-notice button,
+.update-check {
+  padding: 7px 12px;
+  color: #eee7ff;
+  border: 1px solid #726593;
+  border-radius: 7px;
+  background: #292440;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.update-dialog .update-primary {
+  background: #633e9d;
+  border-color: #a881df;
+}
+.update-dialog button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.update-dialog :focus-visible,
+.update-notice :focus-visible {
+  outline: 2px solid #d4b7ff;
+  outline-offset: 2px;
+}
+.update-dialog h2:focus {
+  outline: none;
+}
+
+.update-dialog progress {
   width: 100%;
   accent-color: #a477ef;
 }
 
 .window-actions .update-badge {
   color: #c5a6ff;
+}
+
+.update-notice {
+  position: fixed;
+  z-index: 5;
+  inset: 52px 12px auto auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  color: #eee7ff;
+  background: #201b30;
+  border: 1px solid #5e4e7b;
+  border-radius: 10px;
+  font-size: 13px;
 }

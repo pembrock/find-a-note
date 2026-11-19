@@ -395,23 +395,36 @@ func RecoveryNotice(args []string) bool {
 	return len(args) == 3 && args[0] == recoveryFlag
 }
 
-func FrontendReady(args []string) {
+func diskFull(err error) bool {
+	return errors.Is(err, windows.ERROR_DISK_FULL) || errors.Is(err, windows.ERROR_HANDLE_DISK_FULL)
+}
+
+func FrontendReady(args []string) bool {
 	if len(args) != 3 || (args[0] != healthFlag && args[0] != recoveryFlag) {
-		return
+		return false
 	}
 	exe, err := os.Executable()
 	if err != nil || !safeStage(args[1], exe) {
-		return
+		return false
 	}
 	stage := args[1]
 	pid, err := strconv.ParseUint(args[2], 10, 32)
 	if err != nil {
-		return
+		return false
 	}
 	if args[0] == healthFlag {
 		_ = marker(filepath.Join(stage, "healthy"))
+		// The helper writes finished after the new process passes its health check
+		// and registration (for installed copies) succeeds. On rollback it first
+		// terminates this process and starts the old executable with recoveryFlag.
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if waitMarker(ctx, filepath.Join(stage, "finished"), nil) != nil {
+			return false
+		}
 	}
 	go cleanupFinished(stage, uint32(pid))
+	return args[0] == healthFlag
 }
 
 func cleanupFinished(stage string, pid uint32) {

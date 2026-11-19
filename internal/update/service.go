@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -26,6 +27,9 @@ type Status struct {
 	Version  string `json:"version"`
 	Notes    string `json:"notes"`
 	Progress int    `json:"progress"`
+	Received int64  `json:"received"`
+	Total    int64  `json:"total"`
+	Problem  string `json:"problem"`
 }
 
 type Job struct {
@@ -70,15 +74,41 @@ func (s *Service) Status() Status {
 	return s.state
 }
 
+func (s *Service) RunChecks(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	s.runChecks(ticker.C)
+}
+
+func (s *Service) runChecks(ticks <-chan time.Time) {
+	s.checkOnce(true)
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticks:
+			s.checkOnce(true)
+		}
+	}
+}
+
 func (s *Service) Check() {
+	s.checkOnce(false)
+}
+
+func (s *Service) checkOnce(background bool) {
 	s.mu.Lock()
+	if s.ctx.Err() != nil {
+		s.mu.Unlock()
+		return
+	}
 	switch s.state.Phase {
 	case "unsupported", "checking", "downloading", "ready", "installing", "install-error":
 		s.mu.Unlock()
 		return
 	}
-	s.state = Status{Phase: "checking"}
-	s.job = Job{}
+	previous := s.state
+	s.state.Phase = "checking"
 	s.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(s.ctx, 25*time.Second)
@@ -86,7 +116,11 @@ func (s *Service) Check() {
 	state, job := s.check(ctx)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.state, s.job = state, job
+	if background && state.Phase == "check-error" && previous.Version != "" {
+		s.state = previous
+	} else {
+		s.state, s.job = state, job
+	}
 }
 
 func (s *Service) check(ctx context.Context) (Status, Job) {
@@ -95,7 +129,7 @@ func (s *Service) check(ctx context.Context) (Status, Job) {
 	if errors.Is(err, ErrNoRelease) || (err == nil && !version.NewerThan(s.current)) {
 		return Status{Phase: "current"}, Job{}
 	}
-	fail := Status{Phase: "check-error"}
+	fail := Status{Phase: "check-error", Problem: "feed"}
 	if err != nil {
 		return fail, Job{}
 	}
@@ -112,6 +146,7 @@ func (s *Service) check(ctx context.Context) (Status, Job) {
 	}
 	m, err := VerifyManifest(raw, signature, s.key)
 	if err != nil || m.Version != version.String() {
+		fail.Problem = "manifest"
 		return fail, Job{}
 	}
 	p, ok := s.launcher.Select(m)
@@ -145,19 +180,21 @@ func (s *Service) Download() {
 	s.state.Phase, s.state.Progress = "downloading", 0
 	version, _ := ParseVersion(s.state.Version)
 	p := s.job.Package
+	s.state.Received, s.state.Total, s.state.Problem = 0, p.Size, ""
 	s.mu.Unlock()
 
 	dir, file, err := s.download(ctx, version, p)
-	canceled := errors.Is(ctx.Err(), context.Canceled)
-	cancel()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	canceled := errors.Is(ctx.Err(), context.Canceled)
+	cancel()
 	s.cancel = nil
 	if err != nil || canceled {
 		if dir != "" {
 			_ = os.RemoveAll(dir)
 		}
 		s.state.Phase = "download-error"
+		s.state.Problem = updateProblem(err, "download")
 		if canceled {
 			s.state.Phase = "available"
 		}
@@ -183,9 +220,10 @@ func (s *Service) download(ctx context.Context, version Version, p Package) (str
 		return dir, "", err
 	}
 	defer src.Close()
-	progress := &progressWriter{file: dst, ctx: ctx, total: p.Size, report: func(percent int) {
+	progress := &progressWriter{file: dst, ctx: ctx, report: func(written int64) {
 		s.mu.Lock()
-		s.state.Progress = percent
+		s.state.Received = written
+		s.state.Progress = min(99, int(written*100/p.Size))
 		s.mu.Unlock()
 	}}
 	err = p.ValidateStream(io.TeeReader(src, progress))
@@ -199,10 +237,10 @@ func (s *Service) download(ctx context.Context, version Version, p Package) (str
 }
 
 type progressWriter struct {
-	file           io.Writer
-	ctx            context.Context
-	total, written int64
-	report         func(int)
+	file    io.Writer
+	ctx     context.Context
+	written int64
+	report  func(int64)
 }
 
 func (w *progressWriter) Write(data []byte) (int, error) {
@@ -211,7 +249,7 @@ func (w *progressWriter) Write(data []byte) (int, error) {
 	}
 	n, err := w.file.Write(data)
 	w.written += int64(n)
-	w.report(min(99, int(w.written*100/w.total)))
+	w.report(w.written)
 	return n, err
 }
 
@@ -242,11 +280,25 @@ func (s *Service) Install() bool {
 	defer s.mu.Unlock()
 	if err != nil {
 		s.state.Phase = "install-error"
+		s.state.Problem = updateProblem(err, "prepare")
 		return false
 	}
 	_ = os.RemoveAll(s.cache)
 	s.cache = ""
 	return true
+}
+
+func updateProblem(err error, fallback string) string {
+	switch {
+	case errors.Is(err, syscall.ENOSPC), diskFull(err):
+		return "space"
+	case errors.Is(err, os.ErrPermission):
+		return "permission"
+	case errors.Is(err, errPackageIntegrity):
+		return "integrity"
+	default:
+		return fallback
+	}
 }
 
 func (s *Service) Close() {

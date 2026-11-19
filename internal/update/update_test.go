@@ -235,3 +235,114 @@ func TestGitHubStableMetadata(t *testing.T) {
 		}
 	}
 }
+
+type scheduledProvider struct {
+	*mockProvider
+	requests chan struct{}
+	results  chan error
+}
+
+func (p *scheduledProvider) Latest(ctx context.Context) (Release, error) {
+	select {
+	case p.requests <- struct{}{}:
+	case <-ctx.Done():
+		return Release{}, ctx.Err()
+	}
+	select {
+	case err := <-p.results:
+		return p.release, err
+	case <-ctx.Done():
+		return Release{}, ctx.Err()
+	}
+}
+
+func TestScheduledChecksRecoverAndAvoidOverlap(t *testing.T) {
+	base, launcher, key := fixture(t, "amd64")
+	p := &scheduledProvider{base, make(chan struct{}, 4), make(chan error)}
+	s := New(version(t, "0.1.0"), key, p, launcher)
+	t.Cleanup(s.Close)
+	ticks := make(chan time.Time)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.runChecks(ticks)
+	}()
+	awaitRequest := func() {
+		t.Helper()
+		select {
+		case <-p.requests:
+		case <-time.After(2 * time.Second):
+			t.Fatal("expected update check")
+		}
+	}
+	tick := func() {
+		t.Helper()
+		select {
+		case ticks <- time.Now():
+		case <-time.After(2 * time.Second):
+			t.Fatal("scheduler did not accept tick")
+		}
+	}
+
+	awaitRequest() // Startup.
+	manual := make(chan struct{})
+	go func() { defer close(manual); s.Check() }()
+	select {
+	case <-manual:
+	case <-time.After(2 * time.Second):
+		t.Fatal("manual check overlapped the startup request")
+	}
+	p.results <- errors.New("offline")
+	tick()
+	awaitRequest()
+	p.results <- nil
+
+	// Tick receipt synchronizes with completion of the preceding check.
+	tick()
+	awaitRequest()
+	p.results <- errors.New("rate limited")
+	s.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not stop")
+	}
+	if got := s.Status(); got.Phase != "available" || got.Version != "0.2.0" {
+		t.Fatalf("lost the verified offer after a transient error: %+v", got)
+	}
+}
+
+func TestScheduleSkipsDownloadsAndPreparedUpdates(t *testing.T) {
+	p, l, key := fixture(t, "amd64")
+	s := New(version(t, "0.1.0"), key, p, l)
+	defer s.Close()
+	s.Check()
+	started, done := make(chan struct{}), make(chan struct{})
+	p.open = func(ctx context.Context, _ string) (io.ReadCloser, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	go func() { defer close(done); s.Download() }()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("download did not start")
+	}
+	s.checkOnce(true)
+	if got := s.Status(); got.Phase != "downloading" || got.Total != s.job.Package.Size {
+		t.Fatalf("unexpected download state: %+v", got)
+	}
+	s.Cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("download did not stop")
+	}
+	p.open = nil
+	s.Download()
+	s.checkOnce(true)
+	if got := s.Status(); got.Phase != "ready" || got.Received != got.Total || got.Total <= 0 {
+		t.Fatalf("verified download was not retained: %+v", got)
+	}
+}

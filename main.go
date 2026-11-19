@@ -50,6 +50,7 @@ func main() {
 			app.startup(ctx)
 			updater.startup(ctx)
 		},
+		OnBeforeClose: updater.beforeClose,
 		OnShutdown: func(ctx context.Context) {
 			updater.shutdown()
 			app.shutdown(ctx)

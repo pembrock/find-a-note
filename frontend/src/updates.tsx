@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { info as product } from "../../wails.json";
 import "./updates.css";
 
 type Status = {
@@ -7,205 +8,353 @@ type Status = {
   version: string;
   notes: string;
   progress: number;
+  received: number;
+  total: number;
+  problem: string;
 };
+type Action = "Check" | "Download" | "Install";
 type Bridge = {
   Status(): Promise<Status>;
   Check(): Promise<void>;
   Download(): Promise<void>;
   Cancel(): Promise<void>;
   Install(): Promise<void>;
-  FrontendReady(): Promise<boolean>;
+  FrontendReady(): Promise<string>;
 };
 
-const dismissedKey = "find-a-note.update.deferred";
-const initial: Status = { phase: "idle", version: "", notes: "", progress: 0 };
+const initial: Status = {
+  phase: "idle",
+  version: "",
+  notes: "",
+  progress: 0,
+  received: 0,
+  total: 0,
+  problem: "",
+};
+const actionPhase = {
+  Check: "checking",
+  Download: "downloading",
+  Install: "installing",
+};
+const errorPhase = {
+  Check: "check-error",
+  Download: "download-error",
+  Install: "install-error",
+};
+
+function sameStatus(a: Status, b: Status) {
+  return (
+    a.phase === b.phase &&
+    a.version === b.version &&
+    a.notes === b.notes &&
+    a.progress === b.progress &&
+    a.received === b.received &&
+    a.total === b.total &&
+    a.problem === b.problem
+  );
+}
 
 export function useUpdates() {
   const backend = (window.go?.main as { UpdateBridge?: Bridge } | undefined)
     ?.UpdateBridge;
   const [status, setStatus] = useState(initial);
-  const [manual, setManual] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [recovered, setRecovered] = useState(false);
-  const [deferred, setDeferred] = useState(() => {
-    try {
-      return localStorage.getItem(dismissedKey) ?? "";
-    } catch {
-      return "";
-    }
-  });
+  const [action, setAction] = useState<Action>();
+  const activeAction = useRef<Action>(undefined);
+  const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const cancelSent = useRef(false);
+  const closeAfterDownload = useRef(false);
+  const revision = useRef(0);
 
   useEffect(() => {
-    if (!backend) return;
+    let active = true;
     void backend
-      .FrontendReady()
-      .then(setRecovered)
+      ?.FrontendReady()
+      .then((result) => {
+        if (active) setNotice(result);
+      })
       .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [backend]);
 
   useEffect(() => {
-    if (
-      !backend ||
-      (!pending &&
-        !["idle", "checking", "downloading", "installing"].includes(
-          status.phase,
-        ))
-    )
-      return;
-    let active = true;
-    const refresh = () =>
-      void backend
-        .Status()
-        .then((next) => {
-          if (active) setStatus(next);
-        })
-        .catch(() => {});
-    refresh();
-    const timer = window.setInterval(refresh, 500);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [backend, pending, status.phase]);
-
-  async function run(action: "Check" | "Download" | "Cancel" | "Install") {
     if (!backend) return;
-    if (action === "Check") setManual(true);
-    if (action !== "Cancel") setPending(true);
+    let stopped = false;
+    let timer: number;
+    async function refresh() {
+      const requested = revision.current;
+      try {
+        const next = await backend!.Status();
+        if (!stopped && revision.current === requested) {
+          setStatus((current) => (sameStatus(current, next) ? current : next));
+        }
+      } catch {
+        // An individual missed snapshot can be retried on the next refresh.
+      } finally {
+        if (!stopped) timer = window.setTimeout(refresh, open ? 200 : 1000);
+      }
+    }
+    void refresh();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [backend, open]);
+
+  useEffect(() => {
+    if (!cancelling || status.phase !== "downloading" || cancelSent.current)
+      return;
+    cancelSent.current = true;
+    void backend?.Cancel().catch(() => {
+      cancelSent.current = false;
+      setCancelling(false);
+    });
+  }, [backend, cancelling, status.phase]);
+
+  async function run(next: Action) {
+    if (!backend || activeAction.current) return;
+    activeAction.current = next;
+    revision.current++;
+    setAction(next);
     try {
-      await backend[action]();
+      await backend[next]();
+      revision.current++;
       setStatus(await backend.Status());
     } catch {
-      const phase =
-        action === "Check"
-          ? "check-error"
-          : action === "Install"
-            ? "install-error"
-            : "download-error";
-      setStatus((state) => ({ ...state, phase }));
+      setStatus((state) => ({
+        ...state,
+        phase: errorPhase[next],
+        problem: "",
+      }));
     } finally {
-      if (action !== "Cancel") setPending(false);
+      activeAction.current = undefined;
+      setAction(undefined);
+      cancelSent.current = false;
+      setCancelling(false);
+      if (closeAfterDownload.current) {
+        closeAfterDownload.current = false;
+        setOpen(false);
+      }
     }
   }
 
-  function defer() {
-    setDeferred(status.version);
-    setManual(false);
-    try {
-      localStorage.setItem(dismissedKey, status.version);
-    } catch {
-      /* Retain the preference for this session. */
+  const phase = action ? actionPhase[action] : status.phase;
+  function close() {
+    if (phase === "installing") return;
+    if (phase === "downloading") {
+      closeAfterDownload.current = true;
+      setCancelling(true);
+      return;
     }
+    setOpen(false);
   }
 
   return {
     enabled: Boolean(backend) && status.phase !== "unsupported",
     status,
-    manual,
-    pending,
-    recovered,
-    dismissRecovery: () => setRecovered(false),
-    notify:
-      recovered || (Boolean(status.version) && status.version !== deferred),
-    showOffer: manual || status.version !== deferred,
+    phase,
+    open,
+    cancelling,
+    close,
     run,
-    defer,
+    cancelDownload: () => setCancelling(true),
+    notify: Boolean(status.version),
+    show: () => setOpen(true),
+    check: () => {
+      setOpen(true);
+      if (
+        ![
+          "checking",
+          "downloading",
+          "ready",
+          "installing",
+          "install-error",
+        ].includes(phase)
+      ) {
+        void run("Check");
+      }
+    },
+    notice,
+    dismissNotice: () => setNotice(""),
   };
 }
 
-export function UpdatePanel({
+const titles: Record<string, string> = {
+  checking: "Проверяем обновления…",
+  current: "Установлена последняя версия",
+  unavailable: "Обновление недоступно",
+  available: "Доступно обновление",
+  downloading: "Загрузка обновления",
+  ready: "Обновление готово",
+  installing: "Подготавливаем перезапуск…",
+  "check-error": "Не удалось проверить обновления",
+  "download-error": "Не удалось обновить приложение",
+  "install-error": "Не удалось обновить приложение",
+};
+const problems: Record<string, string> = {
+  feed: "Проверьте подключение к интернету и повторите проверку. GitHub может быть временно недоступен.",
+  manifest: "Не удалось подтвердить подлинность данных о выпуске.",
+  space: "Недостаточно свободного места на диске.",
+  permission: "Приложению не хватает прав на запись.",
+  integrity:
+    "Размер или контрольная сумма файла не совпадают с данными выпуска.",
+  download:
+    "Загрузка прервалась. Проверьте подключение к интернету и повторите попытку.",
+  prepare:
+    "Не удалось подготовить замену приложения. Проверьте доступ к папке установки.",
+};
+const formatSize = (bytes: number) =>
+  (bytes / 1024 ** 2).toLocaleString("ru-RU", { maximumFractionDigits: 1 }) +
+  " МБ";
+
+export function UpdateDialog({
   update,
 }: {
   update: ReturnType<typeof useUpdates>;
 }) {
-  const { status, pending, manual, recovered, showOffer, run } = update;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const { status, phase, open, cancelling, close, run } = update;
   const [confirm, setConfirm] = useState(false);
-  if (!update.enabled && !recovered) return null;
-  const phase = status.phase;
-  const offer =
-    showOffer && (phase === "available" || phase === "download-error");
-  const ready = phase === "ready" || phase === "install-error";
-  const check = [
-    "idle",
-    "current",
-    "unavailable",
-    "available",
-    "check-error",
-    "download-error",
-  ].includes(phase);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const element = dialog.current!;
+    const previous = document.activeElement;
+    element.showModal();
+    heading.current?.focus();
+    return () => {
+      element.close();
+      if (previous instanceof HTMLElement && previous.isConnected)
+        previous.focus();
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (open && !dialog.current?.contains(document.activeElement))
+      heading.current?.focus();
+  }, [open, phase, confirm]);
+
+  if (!open) return null;
+  const retry =
+    phase === "check-error"
+      ? "Check"
+      : phase === "download-error"
+        ? "Download"
+        : phase === "install-error"
+          ? "Install"
+          : undefined;
+
+  function dismiss() {
+    setConfirm(false);
+    close();
+  }
+
   return (
-    <div className="update-panel">
-      {recovered && (
-        <div role="status">
-          Обновление не удалось. Предыдущая версия восстановлена.
-          <button onClick={update.dismissRecovery}>Закрыть сообщение</button>
-        </div>
-      )}
-      {check && (
-        <button disabled={pending} onClick={() => void run("Check")}>
-          Проверить обновления
-        </button>
-      )}
-      {manual && phase === "checking" && (
-        <p role="status">Проверяем обновления…</p>
-      )}
-      {manual && phase === "current" && (
-        <p role="status">Установлена последняя версия.</p>
-      )}
-      {manual && phase === "unavailable" && (
-        <p role="status">
-          Для этого варианта приложения обновление недоступно.
-        </p>
-      )}
-      {manual && phase === "check-error" && (
-        <p role="status">Не удалось проверить обновления.</p>
-      )}
-      {offer && (
-        <>
-          <p role="status">Доступно обновление Find a Note {status.version}</p>
-          {status.notes && <p className="update-notes">{status.notes}</p>}
-          {phase === "download-error" && (
-            <p role="status">Не удалось скачать или проверить файл.</p>
-          )}
-          <div className="update-actions">
-            <button disabled={pending} onClick={update.defer}>
-              Позже
-            </button>
-            <button disabled={pending} onClick={() => void run("Download")}>
-              {phase === "download-error"
-                ? "Повторить загрузку"
-                : "Скачать обновление"}
-            </button>
-          </div>
-        </>
-      )}
-      {phase === "downloading" && (
-        <>
-          <label>
-            Загрузка обновления <progress max={100} value={status.progress} />
-          </label>
-          <button onClick={() => void run("Cancel")}>Отменить загрузку</button>
-        </>
-      )}
-      {ready && (
-        <>
-          <p role="status">
-            {phase === "install-error"
-              ? "Не удалось подготовить замену. Проверьте права записи в каталог приложения."
-              : "Обновление проверено и готово к установке."}
+    <dialog
+      ref={dialog}
+      className="update-dialog"
+      aria-labelledby="update-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        dismiss();
+      }}
+    >
+      <div className="update-shell">
+        <div>
+          <h2 ref={heading} tabIndex={-1} id="update-title" aria-live="polite">
+            {confirm && phase === "ready"
+              ? "Перезапустить Find a Note?"
+              : (titles[phase] ?? "Обновления Find a Note")}
+          </h2>
+          <p className="update-version">
+            {product.productName} {status.version || product.productVersion}
           </p>
-          {confirm && (
+        </div>
+        <div className="update-body">
+          {phase === "available" && (
+            <>
+              <p className="update-muted">
+                Установлена версия {product.productVersion}
+              </p>
+              {status.notes && (
+                <>
+                  <h3>Что нового</h3>
+                  <div
+                    className="update-notes"
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Что нового"
+                  >
+                    {status.notes}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+          {phase === "unavailable" && (
+            <p>Для этого варианта приложения нет подходящего пакета.</p>
+          )}
+          {phase === "downloading" && (
+            <>
+              <progress
+                aria-label="Загрузка обновления"
+                max={100}
+                value={status.total > 0 ? status.progress : undefined}
+              />
+              <p className="update-muted">
+                {cancelling
+                  ? "Отменяем загрузку…"
+                  : status.total > 0
+                    ? `${status.progress}% · Загружено ${formatSize(status.received)} из ${formatSize(status.total)}`
+                    : `Загружено ${formatSize(status.received)}`}
+              </p>
+            </>
+          )}
+          {phase === "ready" && (
             <p>
-              Текущая тренировка завершится. Приложение откроется снова после
-              обновления.
+              {confirm
+                ? "Текущая тренировка завершится. Приложение откроется снова после обновления."
+                : "Новая версия загружена и проверена. Для завершения установки перезапустите приложение."}
             </p>
           )}
-          <div className="update-actions">
-            {confirm ? (
+          {retry && (
+            <p role="alert">
+              {problems[status.problem] ??
+                problems[
+                  retry === "Check"
+                    ? "feed"
+                    : retry === "Download"
+                      ? "download"
+                      : "prepare"
+                ]}
+            </p>
+          )}
+        </div>
+        <div className="update-actions">
+          {phase === "available" ? (
+            <>
+              <button onClick={dismiss}>Позже</button>
+              <button
+                className="update-primary"
+                onClick={() => void run("Download")}
+              >
+                Обновить
+              </button>
+            </>
+          ) : phase === "downloading" ? (
+            <button disabled={cancelling} onClick={update.cancelDownload}>
+              Отмена
+            </button>
+          ) : phase === "ready" ? (
+            confirm ? (
               <>
                 <button onClick={() => setConfirm(false)}>Назад</button>
                 <button
-                  disabled={pending}
+                  className="update-primary"
                   onClick={() => {
                     setConfirm(false);
                     void run("Install");
@@ -216,20 +365,57 @@ export function UpdatePanel({
               </>
             ) : (
               <>
-                <button disabled={pending} onClick={() => void run("Cancel")}>
-                  Отменить обновление
-                </button>
-                <button disabled={pending} onClick={() => setConfirm(true)}>
-                  Установить обновление
+                <button onClick={dismiss}>Позже</button>
+                <button
+                  className="update-primary"
+                  onClick={() => setConfirm(true)}
+                >
+                  Перезапустить
                 </button>
               </>
-            )}
-          </div>
-        </>
-      )}
-      {phase === "installing" && (
-        <p role="status">Подготавливаем перезапуск…</p>
-      )}
+            )
+          ) : (
+            phase !== "installing" && (
+              <>
+                <button onClick={dismiss}>Закрыть</button>
+                {retry && (
+                  <button
+                    className="update-primary"
+                    onClick={() => void run(retry)}
+                  >
+                    Повторить
+                  </button>
+                )}
+              </>
+            )
+          )}
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+export function UpdateNotice({
+  update,
+}: {
+  update: ReturnType<typeof useUpdates>;
+}) {
+  if (!update.notice) return null;
+  return (
+    <div
+      className="update-notice"
+      role="complementary"
+      aria-label="Результат обновления"
+    >
+      <div role="status">
+        <strong>
+          {update.notice === "updated"
+            ? "Find a Note обновлён"
+            : "Предыдущая версия восстановлена"}
+        </strong>
+        <p>Версия {product.productVersion}</p>
+      </div>
+      <button onClick={update.dismissNotice}>Понятно</button>
     </div>
   );
 }
