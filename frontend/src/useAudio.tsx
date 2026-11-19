@@ -13,6 +13,7 @@ const storageKey = "sonari.audio.v1";
 export function audioSource(state: MIDIState) {
   if (state.status !== "connected" || !state.selected) return "virtual";
   const ambiguous =
+    !state.selected.identity ||
     state.devices.filter((d) => d.identity === state.selected!.identity)
       .length !== 1;
   return ambiguous

@@ -189,7 +189,7 @@ export function useMidi(
   async function select(device: MIDIDevice | null) {
     if (!backend || busy.current) return;
     busy.current = true;
-    desired.current = device?.identity ?? null;
+    desired.current = device?.identity || null;
     switching.current = true;
     stop.current();
     setPending(true);
@@ -198,7 +198,7 @@ export function useMidi(
     try {
       localStorage.setItem(
         preferenceKey,
-        JSON.stringify(device?.identity ?? null),
+        JSON.stringify(device?.identity || null),
       );
     } catch {
       setWarning("midi-selection-save-error");

@@ -91,7 +91,7 @@ func (m *Manager) State() State            { return m.call("state", "") }
 func (m *Manager) Refresh() State          { return m.call("refresh", "") }
 func (m *Manager) Connect(id string) State { return m.call("connect", id) }
 func (m *Manager) Disconnect() State       { return m.call("disconnect", "") }
-func (m *Manager) Shutdown()               { m.call("shutdown", "") }
+func (m *Manager) Shutdown()               { m.call("shutdown", ""); <-m.done }
 func (m *Manager) publish() {
 	m.state.Revision++
 	if m.emit != nil {
@@ -293,6 +293,13 @@ func (m *Manager) process(q queued) {
 }
 func (m *Manager) run() {
 	defer close(m.done)
+	if driver, ok := m.driver.(interface{ Close() error }); ok {
+		defer func() {
+			if err := driver.Close(); err != nil {
+				log.Printf("MIDI driver shutdown: %v", err)
+			}
+		}()
+	}
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	m.refresh()

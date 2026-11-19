@@ -39,8 +39,9 @@ export function useCalibration(midi: MIDIState) {
   const connected = midi.status === "connected" && midi.selected;
   const ambiguous =
     !!connected &&
-    midi.devices.filter((d) => d.identity === midi.selected!.identity)
-      .length !== 1;
+    (!midi.selected!.identity ||
+      midi.devices.filter((d) => d.identity === midi.selected!.identity)
+        .length !== 1);
   const profile = connected
     ? temporary?.session === midi.session
       ? temporary.profile
@@ -58,7 +59,7 @@ export function useCalibration(midi: MIDIState) {
     };
     // Offering the optional wizard is remembered independently of confirmed bounds.
     try {
-      persist(value);
+      if (midi.selected!.identity) persist(value);
     } catch {
       saved.current = value;
       setStore(value);

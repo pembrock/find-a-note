@@ -9,7 +9,7 @@ import (
 type App struct{ midi *midi.Manager }
 
 func (a *App) startup(ctx context.Context) {
-	a.midi = midi.New(midi.NativeDriver{}, func(name string, data any) { runtime.EventsEmit(ctx, name, data) })
+	a.midi = midi.New(&midi.NativeDriver{}, func(name string, data any) { runtime.EventsEmit(ctx, name, data) })
 }
 func (a *App) shutdown(ctx context.Context) {
 	if a.midi != nil {
