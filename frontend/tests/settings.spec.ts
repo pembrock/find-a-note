@@ -15,7 +15,7 @@ test("sections default closed, toggle independently by keyboard and retain only 
     .first();
   await open.click();
   const headers = page.locator(".section-trigger");
-  await expect(headers).toHaveCount(5);
+  await expect(headers).toHaveCount(6);
   for (const header of await headers.all()) {
     await expect(header).toHaveAttribute("aria-expanded", "false");
     const id = await header.getAttribute("aria-controls");

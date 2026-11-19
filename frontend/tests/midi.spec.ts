@@ -84,7 +84,7 @@ async function installMIDI(
               state.selected = devices.find((d) => d.id === id);
               state.status = options.fail ? "error" : "connected";
               state.message = options.fail
-                ? "Не удалось подключиться: порт занят"
+                ? "midi-port-busy"
                 : "";
               return publish();
             },
@@ -115,7 +115,7 @@ async function installMIDI(
             ...state,
             devices: [],
             status: "error",
-            message: "MIDI-устройство отключено",
+            message: "midi-device-removed:reconnect",
             session: String(Number(state.session) + 1),
           };
           publish();
@@ -334,6 +334,16 @@ test("connection failure and unplug leave virtual exercises available and allow 
     "aria-valuenow",
     "1",
   );
+});
+
+test("backend MIDI error codes are translated into English", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sonari.language.v1", "en"));
+  await installMIDI(page, { fail: true });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Input device", exact: true }).click();
+  const menu = page.getByRole("dialog", { name: "Input device" });
+  await menu.getByRole("button", { name: "Test Piano 1", exact: false }).click();
+  await expect(menu.getByRole("alert")).toHaveText("The MIDI port is in use by another app.");
 });
 
 test("no-device menu fits 760x560 and closes using keyboard or outside click", async ({

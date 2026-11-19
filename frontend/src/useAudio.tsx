@@ -1,3 +1,4 @@
+import { useLanguage } from "./i18n";
 import {
   useEffect,
   useLayoutEffect,
@@ -129,21 +130,22 @@ export function SoundToggle({
   sound: Pick<ReturnType<typeof useAudio>, "enabled" | "toggle">;
   descriptionId?: string;
 }) {
+  const { t } = useLanguage();
   return (
-      <div className="toggle-row">
-        <span>Воспроизводить звук</span>
-        <button
-          type="button"
-          role="switch"
-          aria-label="Воспроизводить звук"
-          aria-describedby={descriptionId}
-          aria-checked={sound.enabled}
-          className={"switch " + (sound.enabled ? "on" : "")}
-          onClick={sound.toggle}
-        >
-          <span />
-        </button>
-      </div>
+    <div className="toggle-row">
+      <span>{t("play-sound")}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-label={t("play-sound")}
+        aria-describedby={descriptionId}
+        aria-checked={sound.enabled}
+        className={"switch " + (sound.enabled ? "on" : "")}
+        onClick={sound.toggle}
+      >
+        <span />
+      </button>
+    </div>
   );
 }
 
@@ -152,13 +154,14 @@ export function AudioSettings({
 }: {
   sound: ReturnType<typeof useAudio>;
 }) {
+  const { t } = useLanguage();
   return (
     <>
       <SoundToggle sound={sound} />
       <label className="audio-volume">
-        Громкость <output>{sound.volume}%</output>
+        {t("volume")} <output>{sound.volume}%</output>
         <input
-          aria-label="Громкость"
+          aria-label={t("volume")}
           type="range"
           min="0"
           max="100"
@@ -168,23 +171,20 @@ export function AudioSettings({
       </label>
       {sound.status === "locked" && (
         <button className="primary" onClick={() => void audio.activate()}>
-          Включить звук
+          {t("enable-sound")}
         </button>
       )}
       <details className="sound-info">
-        <summary>Об используемом звуке</summary>
+        <summary>{t("about-the-piano-sound")}</summary>
         <p>Salamander Grand Piano · Alexander Holm · CC BY 3.0</p>
         <a
           href="https://github.com/Tonejs/audio/tree/master/salamander"
           target="_blank"
           rel="noreferrer"
         >
-          Источник сэмплов
+          {t("sample-source")}
         </a>
-        <p>
-          Акустическое фортепиано. Включение сохраняется для текущего источника
-          ввода.
-        </p>
+        <p>{t("audio-source-preference")}</p>
       </details>
     </>
   );
@@ -195,20 +195,17 @@ export function AudioNotices({
 }: {
   sound: ReturnType<typeof useAudio>;
 }) {
+  const { t } = useLanguage();
   return (
     <>
       {sound.status === "loading" && (
         <p role="status" className="settings-note">
-          Загрузка фортепиано…
+          {t("loading-piano-sounds")}
         </p>
       )}
-      {sound.status === "error" && (
-        <p role="alert">
-          Не удалось загрузить фортепиано. Тренировка доступна без звука.
-        </p>
-      )}
+      {sound.status === "error" && <p role="alert">{t("audio-load-error")}</p>}
       {sound.saveError && (
-        <p role="alert">Не удалось сохранить настройки звука.</p>
+        <p role="alert">{t("could-not-save-sound-preferences")}</p>
       )}
     </>
   );

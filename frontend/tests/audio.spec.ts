@@ -279,7 +279,7 @@ test("sound settings fit supported window sizes", async ({ page }) => {
   }
 });
 
-test("accordion does not release held MIDI audio or change connection and calibration", async ({
+test("accordion and language changes preserve held MIDI audio, connection and calibration", async ({
   page,
 }) => {
   await prepare(page);
@@ -294,6 +294,9 @@ test("accordion does not release held MIDI audio or change connection and calibr
     await header.click();
     await header.click();
   }
+  await page.getByRole("button", { name: "Общие", exact: true }).click();
+  await page.getByRole("combobox", { name: "Язык приложения" }).selectOption("en");
+  await expect(page.getByRole("button", { name: "Input device", exact: true })).toContainText("SE25");
   expect(await count(page, "stop")).toBe(stops);
   expect(
     await page.evaluate(async () => ({

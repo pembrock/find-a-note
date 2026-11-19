@@ -1,3 +1,4 @@
+import { type MessageKey } from "./i18n";
 import { useEffect, useRef, useState } from "react";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import type { NoteOn } from "./model";
@@ -47,7 +48,7 @@ export function useMidi(
   const [state, setState] = useState(initial);
   const [pending, setPending] = useState(false);
   const [last, setLast] = useState<MIDIEvent | null>(null);
-  const [warning, setWarning] = useState("");
+  const [warning, setWarning] = useState<MessageKey | "">("");
   const current = useRef(initial);
   const callback = useRef(onNote);
   callback.current = onNote;
@@ -77,7 +78,7 @@ export function useMidi(
     const next = {
       ...current.current,
       status: "error",
-      message: "Не удалось связаться с MIDI. Виртуальная клавиатура доступна.",
+      message: "midi-bridge-error",
     };
     current.current = next;
     if (alive.current) setState(next);
@@ -172,10 +173,7 @@ export function useMidi(
         const matches = next.devices.filter((d) => d.identity === preferred);
         if (matches.length === 1) {
           await restore(next);
-        } else if (matches.length > 1)
-          setWarning(
-            "Найдено несколько одинаковых MIDI-устройств. Выбери нужное вручную.",
-          );
+        } else if (matches.length > 1) setWarning("midi-identical-devices");
       })
       .catch(() => {
         if (active) bindingError();
@@ -203,7 +201,7 @@ export function useMidi(
         JSON.stringify(device?.identity ?? null),
       );
     } catch {
-      setWarning("Не удалось сохранить выбор устройства.");
+      setWarning("midi-selection-save-error");
     }
     try {
       apply(

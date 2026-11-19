@@ -1,3 +1,4 @@
+import { type MessageKey } from "./i18n";
 import { useLayoutEffect, useRef, useState } from "react";
 import {
   calibrationKey,
@@ -14,7 +15,7 @@ export type Wizard = {
   stage: "prepare" | "left" | "right" | "confirm" | "lost";
   lower?: number;
   upper?: number;
-  error: string;
+  error: MessageKey | "";
 };
 export function useCalibration(midi: MIDIState) {
   const [store, setStore] = useState(loadCalibration);
@@ -83,8 +84,7 @@ export function useCalibration(midi: MIDIState) {
           stage: "lost",
           lower: undefined,
           upper: undefined,
-          error:
-            "Подключение потеряно. Переподключите инструмент и начните определение заново.",
+          error: "calibration-connection-lost",
         });
       return;
     }
@@ -122,8 +122,7 @@ export function useCalibration(midi: MIDIState) {
       if (!validBounds(active.lower, event.note))
         commit({
           ...active,
-          error:
-            "Правая клавиша должна быть выше левой. Отпустите клавишу и попробуйте ещё раз или определите диапазон заново.",
+          error: "calibration-invalid-order",
         });
       else
         commit({ ...active, upper: event.note, stage: "confirm", error: "" });
@@ -175,8 +174,7 @@ export function useCalibration(midi: MIDIState) {
     } catch {
       commit({
         ...active,
-        error:
-          "Не удалось сохранить диапазон. Настройки не изменены; попробуйте ещё раз.",
+        error: "calibration-save-error",
       });
     }
   }

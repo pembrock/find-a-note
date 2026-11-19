@@ -233,7 +233,7 @@ func RunHelper(args []string, current Version, key ed25519.PublicKey) bool {
 	}
 	if err := runHelper(stage, target, uint32(pid), args[3], current, key); err != nil {
 		if _, waiting := os.Stat(filepath.Join(stage, "waiting")); waiting == nil {
-			reportFailure("Не удалось завершить обновление. Папка восстановления: " + stage)
+			reportFailure(stage)
 		}
 	}
 	return true
@@ -447,7 +447,13 @@ func cleanupFinished(stage string, pid uint32) {
 	_ = os.Remove(stage)
 }
 
-func reportFailure(message string) {
+func reportFailure(stage string) {
+	// The helper may run without WebView2 or access to the app's local storage.
+	uiLanguage, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetUserDefaultUILanguage").Call()
+	message := "Could not complete the update. Recovery folder: " + stage
+	if uiLanguage&0x3ff == 0x19 {
+		message = "Не удалось завершить обновление. Папка восстановления: " + stage
+	}
 	text, _ := windows.UTF16PtrFromString(message)
 	title, _ := windows.UTF16PtrFromString("Find a Note")
 	_, _ = windows.MessageBox(0, text, title, 0x10)

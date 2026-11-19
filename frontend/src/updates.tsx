@@ -1,3 +1,9 @@
+import {
+  LanguageSelect,
+  type MessageKey,
+  localizedNotes,
+  useLanguage,
+} from "./i18n";
 // SPDX-License-Identifier: GPL-3.0-only
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { info as product } from "../../wails.json";
@@ -182,42 +188,44 @@ export function useUpdates() {
   };
 }
 
-const titles: Record<string, string> = {
-  checking: "Проверяем обновления…",
-  current: "Установлена последняя версия",
-  unavailable: "Обновление недоступно",
-  available: "Доступно обновление",
-  downloading: "Загрузка обновления",
-  ready: "Обновление готово",
-  installing: "Подготавливаем перезапуск…",
-  "check-error": "Не удалось проверить обновления",
-  "download-error": "Не удалось обновить приложение",
-  "install-error": "Не удалось обновить приложение",
+const titles: Partial<Record<string, MessageKey>> = {
+  checking: "checking-for-updates",
+  current: "youre-up-to-date",
+  unavailable: "update-unavailable",
+  available: "update-available",
+  downloading: "downloading-update",
+  ready: "update-ready",
+  installing: "preparing-to-restart",
+  "check-error": "could-not-check-for-updates",
+  "download-error": "could-not-update-the-app",
+  "install-error": "could-not-update-the-app",
 };
-const problems: Record<string, string> = {
-  feed: "Проверьте подключение к интернету и повторите проверку. GitHub может быть временно недоступен.",
-  manifest: "Не удалось подтвердить подлинность данных о выпуске.",
-  space: "Недостаточно свободного места на диске.",
-  permission: "Приложению не хватает прав на запись.",
-  integrity:
-    "Размер или контрольная сумма файла не совпадают с данными выпуска.",
-  download:
-    "Загрузка прервалась. Проверьте подключение к интернету и повторите попытку.",
-  prepare:
-    "Не удалось подготовить замену приложения. Проверьте доступ к папке установки.",
+const problems: Partial<Record<string, MessageKey>> = {
+  feed: "update-feed-error",
+  manifest: "update-manifest-error",
+  space: "update-space-error",
+  permission: "update-permission-error",
+  integrity: "update-integrity-error",
+  download: "update-download-error",
+  prepare: "update-prepare-error",
 };
-const formatSize = (bytes: number) =>
-  (bytes / 1024 ** 2).toLocaleString("ru-RU", { maximumFractionDigits: 1 }) +
-  " МБ";
 
 export function UpdateDialog({
   update,
 }: {
   update: ReturnType<typeof useUpdates>;
 }) {
+  const { t, language } = useLanguage();
+  const formatSize = (bytes: number) =>
+    t("size-mb", {
+      size: (bytes / 1024 ** 2).toLocaleString(language, {
+        maximumFractionDigits: 1,
+      }),
+    });
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const { status, phase, open, cancelling, close, run } = update;
+  const notes = localizedNotes(status.notes, language);
   const [confirm, setConfirm] = useState(false);
 
   useLayoutEffect(() => {
@@ -267,8 +275,8 @@ export function UpdateDialog({
         <div>
           <h2 ref={heading} tabIndex={-1} id="update-title" aria-live="polite">
             {confirm && phase === "ready"
-              ? "Перезапустить Find a Note?"
-              : (titles[phase] ?? "Обновления Find a Note")}
+              ? t("restart-find-a-note")
+              : t(titles[phase] ?? "find-a-note-updates")}
           </h2>
           <p className="update-version">
             {product.productName} {status.version || product.productVersion}
@@ -278,81 +286,87 @@ export function UpdateDialog({
           {phase === "available" && (
             <>
               <p className="update-muted">
-                Установлена версия {product.productVersion}
+                {t("installed-version", { version: product.productVersion })}
               </p>
-              {status.notes && (
+              {notes && (
                 <>
-                  <h3>Что нового</h3>
+                  <h3>{t("whats-new")}</h3>
                   <div
                     className="update-notes"
                     tabIndex={0}
                     role="region"
-                    aria-label="Что нового"
+                    aria-label={t("whats-new")}
                   >
-                    {status.notes}
+                    {notes}
                   </div>
                 </>
               )}
             </>
           )}
-          {phase === "unavailable" && (
-            <p>Для этого варианта приложения нет подходящего пакета.</p>
-          )}
+          {phase === "unavailable" && <p>{t("update-package-unavailable")}</p>}
           {phase === "downloading" && (
             <>
               <progress
-                aria-label="Загрузка обновления"
+                aria-label={t("downloading-update")}
                 max={100}
                 value={status.total > 0 ? status.progress : undefined}
               />
               <p className="update-muted">
                 {cancelling
-                  ? "Отменяем загрузку…"
+                  ? t("canceling-download")
                   : status.total > 0
-                    ? `${status.progress}% · Загружено ${formatSize(status.received)} из ${formatSize(status.total)}`
-                    : `Загружено ${formatSize(status.received)}`}
+                    ? t("download-progress", {
+                        progress: status.progress,
+                        received: formatSize(status.received),
+                        total: formatSize(status.total),
+                      })
+                    : t("download-bytes", {
+                        received: formatSize(status.received),
+                      })}
               </p>
             </>
           )}
           {phase === "ready" && (
             <p>
               {confirm
-                ? "Текущая тренировка завершится. Приложение откроется снова после обновления."
-                : "Новая версия загружена и проверена. Для завершения установки перезапустите приложение."}
+                ? t("update-restart-confirmation")
+                : t("update-ready-explainer")}
             </p>
           )}
           {retry && (
             <p role="alert">
-              {problems[status.problem] ??
-                problems[
-                  retry === "Check"
-                    ? "feed"
-                    : retry === "Download"
-                      ? "download"
-                      : "prepare"
-                ]}
+              {t(
+                problems[status.problem] ??
+                  problems[
+                    retry === "Check"
+                      ? "feed"
+                      : retry === "Download"
+                        ? "download"
+                        : "prepare"
+                  ]!,
+              )}
             </p>
           )}
         </div>
         <div className="update-actions">
           {phase === "available" ? (
             <>
-              <button onClick={dismiss}>Позже</button>
+              <button onClick={dismiss}>{t("later")}</button>
               <button
                 className="update-primary"
                 onClick={() => void run("Download")}
               >
-                Обновить
+                {t("update")}
               </button>
             </>
           ) : phase === "downloading" ? (
             <button disabled={cancelling} onClick={update.cancelDownload}>
-              Отмена
+              {t("cancel")}
             </button>
           ) : phase === "ready" ? (
             confirm ? (
               <>
-                <button onClick={() => setConfirm(false)}>Назад</button>
+                <button onClick={() => setConfirm(false)}>{t("back")}</button>
                 <button
                   className="update-primary"
                   onClick={() => {
@@ -360,36 +374,37 @@ export function UpdateDialog({
                     void run("Install");
                   }}
                 >
-                  Подтвердить перезапуск
+                  {t("confirm-restart")}
                 </button>
               </>
             ) : (
               <>
-                <button onClick={dismiss}>Позже</button>
+                <button onClick={dismiss}>{t("later")}</button>
                 <button
                   className="update-primary"
                   onClick={() => setConfirm(true)}
                 >
-                  Перезапустить
+                  {t("restart")}
                 </button>
               </>
             )
           ) : (
             phase !== "installing" && (
               <>
-                <button onClick={dismiss}>Закрыть</button>
+                <button onClick={dismiss}>{t("close")}</button>
                 {retry && (
                   <button
                     className="update-primary"
                     onClick={() => void run(retry)}
                   >
-                    Повторить
+                    {t("retry")}
                   </button>
                 )}
               </>
             )
           )}
         </div>
+        {phase !== "installing" && <LanguageSelect />}
       </div>
     </dialog>
   );
@@ -400,22 +415,23 @@ export function UpdateNotice({
 }: {
   update: ReturnType<typeof useUpdates>;
 }) {
+  const { t } = useLanguage();
   if (!update.notice) return null;
   return (
     <div
       className="update-notice"
       role="complementary"
-      aria-label="Результат обновления"
+      aria-label={t("update-result")}
     >
       <div role="status">
         <strong>
           {update.notice === "updated"
-            ? "Find a Note обновлён"
-            : "Предыдущая версия восстановлена"}
+            ? t("find-a-note-updated")
+            : t("previous-version-restored")}
         </strong>
-        <p>Версия {product.productVersion}</p>
+        <p>{t("version", { version: product.productVersion })}</p>
       </div>
-      <button onClick={update.dismissNotice}>Понятно</button>
+      <button onClick={update.dismissNotice}>{t("ok")}</button>
     </div>
   );
 }

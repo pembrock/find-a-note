@@ -70,6 +70,8 @@ func (m *mockLauncher) Start(job Job) error {
 	return errors.Join(err, m.err)
 }
 
+const bilingualNotes = "English\n\n- Release notes\n\nРусский\n\n- Заметки о выпуске"
+
 func fixture(t *testing.T, arch string) (*mockProvider, *mockLauncher, ed25519.PublicKey) {
 	t.Helper()
 	key, private, err := ed25519.GenerateKey(nil)
@@ -79,7 +81,7 @@ func fixture(t *testing.T, arch string) (*mockProvider, *mockLauncher, ed25519.P
 	asset := []byte("test payload; never executed")
 	digest := sha256.Sum256(asset)
 	name := "Find-a-Note-0.2.0-Windows-Portable.exe"
-	data, err := CanonicalManifest(Manifest{Schema: 1, Product: "find-a-note", Version: "0.2.0", Notes: "test",
+	data, err := CanonicalManifest(Manifest{Schema: 1, Product: "find-a-note", Version: "0.2.0", Notes: bilingualNotes,
 		Packages: []Package{{OS: "windows", Arch: arch, Kind: "portable", Name: name, Size: int64(len(asset)), SHA256: hex.EncodeToString(digest[:]), Method: "replace-exe"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +121,8 @@ func TestSignedChecks(t *testing.T) {
 			s.Check()
 			if status := s.Status(); status.Phase != test.phase {
 				t.Fatalf("got %+v want %s", status, test.phase)
+			} else if test.phase == "available" && status.Notes != bilingualNotes {
+				t.Fatalf("signed bilingual notes changed: %q", status.Notes)
 			}
 			if s.Install() {
 				t.Fatal("installed without download")
@@ -136,6 +140,7 @@ func TestManifestRejectsAmbiguityEvenWhenSigned(t *testing.T) {
 	valid := p.files[ManifestName]
 	for _, data := range [][]byte{append(append([]byte(nil), valid...), '\n'),
 		bytes.Replace(valid, []byte(`"schema":1`), []byte(`"schema":2,"schema":1`), 1),
+		bytes.Replace(valid, []byte(`"schema":1`), []byte(`"schema":1,"notes_en":"unexpected"`), 1),
 		[]byte("invalid")} {
 		if _, err := VerifyManifest(data, ed25519.Sign(private, data), key); err == nil {
 			t.Fatalf("accepted %s", data)

@@ -4,6 +4,7 @@ package midi
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -77,7 +78,7 @@ func (m *Manager) call(action, id string) State {
 	select {
 	case m.requests <- c:
 	case <-m.done:
-		return State{Devices: []Device{}, Status: "virtual", Message: "MIDI остановлен"}
+		return State{Devices: []Device{}, Status: "virtual", Message: "midi-stopped"}
 	}
 	select {
 	case s := <-c.reply:
@@ -124,7 +125,7 @@ func (m *Manager) closeInput() error {
 }
 func (m *Manager) fail(message string) {
 	if err := m.closeInput(); err != nil {
-		message += " Не удалось освободить MIDI-порт; попробуй отключиться ещё раз."
+		message += ":release"
 	}
 	m.state.Status = "error"
 	m.state.Message = message
@@ -134,15 +135,16 @@ func (m *Manager) lost(message string) {
 	if m.state.Selected != nil {
 		m.reconnectIdentity = m.state.Selected.Identity
 	}
-	m.fail(message + " Подключимся автоматически, когда устройство станет доступно.")
+	m.fail(message + ":reconnect")
 }
 func (m *Manager) refresh() {
 	devices, err := m.driver.List()
 	if err != nil {
 		if m.state.Status == "connected" {
-			m.lost("Не удалось обновить список MIDI-устройств.")
+			m.lost("midi-refresh-error")
 		} else {
-			m.fail("Не удалось обновить список MIDI-устройств: " + err.Error())
+			log.Printf("MIDI refresh-error: %v", err)
+			m.fail("midi-refresh-error")
 		}
 		return
 	}
@@ -158,11 +160,11 @@ func (m *Manager) refresh() {
 			}
 		}
 		if !found {
-			m.lost("MIDI-устройство отключено. Виртуальная клавиатура доступна.")
+			m.lost("midi-device-removed")
 			return
 		}
 		if err := m.input.Check(); err != nil {
-			m.lost("Соединение MIDI потеряно.")
+			m.lost("midi-connection-lost")
 			return
 		}
 	}
@@ -182,7 +184,7 @@ func (m *Manager) refresh() {
 			return
 		}
 		if len(matches) > 1 {
-			m.state.Message = "Найдено несколько одинаковых MIDI-устройств. Выбери нужное вручную."
+			m.state.Message = "midi-identical-devices"
 		}
 	}
 	m.publish()
@@ -190,7 +192,7 @@ func (m *Manager) refresh() {
 func (m *Manager) connect(id string) {
 	if err := m.closeInput(); err != nil {
 		m.state.Status = "error"
-		m.state.Message = "Не удалось закрыть прежний MIDI-порт."
+		m.state.Message = "midi-close-previous"
 		m.publish()
 		return
 	}
@@ -199,7 +201,8 @@ func (m *Manager) connect(id string) {
 	m.state.Selected = nil
 	devices, err := m.driver.List()
 	if err != nil {
-		m.fail("Не удалось получить MIDI-устройства: " + err.Error())
+		log.Printf("MIDI list-error: %v", err)
+		m.fail("midi-list-error")
 		return
 	}
 	m.state.Devices = append([]Device{}, devices...)
@@ -212,7 +215,7 @@ func (m *Manager) connect(id string) {
 		}
 	}
 	if chosen == nil {
-		m.fail("Устройство больше недоступно. Обнови список.")
+		m.fail("midi-device-unavailable")
 		return
 	}
 	m.state.Selected = chosen
@@ -226,12 +229,18 @@ func (m *Manager) connect(id string) {
 		}
 	})
 	if err != nil {
-		m.fail("Не удалось подключиться: " + err.Error())
+		log.Printf("MIDI connect-error: %v", err)
+		code := "midi-connect-error"
+		if errors.Is(err, errPortBusy) {
+			code = "midi-port-busy"
+		}
+		m.fail(code)
 		return
 	}
 	m.input = input
 	if err = input.Start(); err != nil {
-		m.fail("Не удалось начать MIDI-ввод: " + err.Error())
+		log.Printf("MIDI start-error: %v", err)
+		m.fail("midi-start-error")
 		return
 	}
 	m.state.Status = "connected"
@@ -243,7 +252,7 @@ func (m *Manager) process(q queued) {
 		return
 	}
 	if q.packet.Closed {
-		m.lost("MIDI-порт закрыт.")
+		m.lost("midi-port-closed")
 		return
 	}
 	b := q.packet.Message
@@ -300,7 +309,7 @@ func (m *Manager) run() {
 				m.reconnectIdentity = ""
 				if err := m.closeInput(); err != nil {
 					m.state.Status = "error"
-					m.state.Message = "Не удалось закрыть MIDI-порт."
+					m.state.Message = "midi-close-error"
 				} else {
 					m.state.Status = "virtual"
 					m.state.Message = ""
@@ -314,7 +323,7 @@ func (m *Manager) run() {
 			}
 		case q := <-m.packets:
 			if m.overflow.Swap(false) {
-				m.fail("Поток MIDI перегружен. Подключись повторно.")
+				m.fail("midi-overload")
 			} else {
 				m.process(q)
 			}
@@ -324,13 +333,15 @@ func (m *Manager) run() {
 	}
 }
 
+var errPortBusy = errors.New("порт занят другим приложением")
+
 func resultError(code uintptr) error {
 	if code == 0 {
 		return nil
 	}
 	switch code {
 	case 4:
-		return errors.New("порт занят другим приложением")
+		return errPortBusy
 	case 2, 5, 6:
 		return errors.New("устройство или драйвер недоступны")
 	default:

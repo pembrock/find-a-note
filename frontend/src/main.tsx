@@ -1,3 +1,4 @@
+import { LanguageProvider, LanguageSelect, solfege, useLanguage } from "./i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { info as product } from "../../wails.json";
 import { createRoot } from "react-dom/client";
@@ -72,6 +73,7 @@ declare global {
   }
 }
 function Staff({ note, settings }: { note: number; settings: Settings }) {
+  const { t } = useLanguage();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current!;
@@ -148,11 +150,19 @@ function Staff({ note, settings }: { note: number; settings: Settings }) {
       className="staff"
       ref={ref}
       role="img"
-      aria-label={`Нотный стан: ${describe(note, settings.spelling).letter}, ${notationFor(note, settings.clef, settings.spelling).clef === "bass" ? "басовый" : "скрипичный"} ключ`}
+      aria-label={t("staff-label", {
+        note: describe(note, settings.spelling).letter,
+        clef: t(
+          notationFor(note, settings.clef, settings.spelling).clef === "bass"
+            ? "bass-clef"
+            : "treble-clef",
+        ),
+      })}
     />
   );
 }
 function App() {
+  const { t, language } = useLanguage();
   const [custom, setS] = useState(() =>
     loadSettings({ minimum: 0, maximum: 127 }),
   );
@@ -457,14 +467,16 @@ function App() {
         </div>
         <div className="training-controls">
           <SelectField
-            label="Тренировка"
+            label={t("training")}
             value={training.mode}
             options={[
               {
                 value: "first",
-                label: `Первые ноты · ${training.expanded ? 7 : 5} нот`,
+                label: t("first-notes-count", {
+                  count: training.expanded ? 7 : 5,
+                }),
               },
-              { value: "custom", label: "Своя тренировка" },
+              { value: "custom", label: t("custom-training") },
             ]}
             onChange={(mode) =>
               changeTraining({ ...training, mode: mode as Training["mode"] })
@@ -474,17 +486,17 @@ function App() {
             (training.expanded ? (
               <button
                 className="learning-action"
-                title="Вся октава: начать с пяти нот"
+                title={t("full-octave-start-with-five-notes")}
                 onClick={() => changeTraining({ ...training, expanded: false })}
               >
-                Начать с пяти нот
+                {t("start-with-five-notes")}
               </button>
             ) : (
               <button
                 className="learning-action"
                 onClick={() => changeTraining({ ...training, expanded: true })}
               >
-                + Добавить ноты
+                {t("add-notes")}
               </button>
             ))}
         </div>
@@ -492,31 +504,31 @@ function App() {
           {updates.notify && (
             <button
               className="update-badge"
-              title="Обновления Find a Note"
-              aria-label="Обновления Find a Note"
+              title={t("find-a-note-updates")}
+              aria-label={t("find-a-note-updates")}
               onClick={updates.show}
             >
               <Download size={17} />
             </button>
           )}
-          <button title="Настройки" onClick={() => setOpen(!open)}>
+          <button title={t("settings")} onClick={() => setOpen(!open)}>
             <Gear />
           </button>
           <button
-            title="Свернуть"
+            title={t("minimize")}
             onClick={() => window.runtime?.WindowMinimise()}
           >
             <Minus />
           </button>
           <button
-            title="Развернуть"
+            title={t("maximize")}
             onClick={() => window.runtime?.WindowToggleMaximise()}
           >
             <Square size={17} />
           </button>
           <button
             className="close"
-            title="Закрыть"
+            title={t("close")}
             onClick={() => window.runtime?.Quit()}
           >
             <X />
@@ -531,17 +543,17 @@ function App() {
                 <Keyboard size={32} />
                 <h1>
                   {rangeChanged
-                    ? "Обновляем диапазон…"
+                    ? t("updating-note-range")
                     : training.mode === "first"
-                      ? "Учебный набор недоступен"
-                      : "Выбранные ноты недоступны"}
+                      ? t("training-set-unavailable")
+                      : t("selected-notes-unavailable")}
                 </h1>
                 {!rangeChanged && (
                   <>
                     <p>
                       {training.mode === "first"
-                        ? "Инструмент не содержит все ноты набора «Первые ноты». Выберите свою тренировку с доступными нотами или виртуальный ввод."
-                        : "Выбранный диапазон не пересекается с доступными нотами инструмента. Исходные настройки сохранены."}
+                        ? t("training-set-incomplete")
+                        : t("training-range-empty")}
                     </p>
                     <button
                       className="primary"
@@ -556,10 +568,10 @@ function App() {
                         restart(value, target);
                       }}
                     >
-                      Использовать доступный диапазон
+                      {t("use-available-range")}
                     </button>
                     <button onClick={() => midi.select(null)}>
-                      Виртуальный ввод
+                      {t("use-virtual-keyboard")}
                     </button>
                   </>
                 )}
@@ -569,13 +581,11 @@ function App() {
                 <div className="success-orb">
                   <Check size={38} />
                 </div>
-                <h1>Отличная работа!</h1>
-                <p>Тренировка завершена</p>
-                <div className="result">
-                  {correct} верно <span>·</span> {wrong} ошибок
-                </div>
+                <h1>{t("great-work")}</h1>
+                <p>{t("training-complete")}</p>
+                <div className="result">{t("score", { correct, wrong })}</div>
                 <button className="primary" onClick={() => restart()}>
-                  <RotateCcw size={17} /> Ещё раз
+                  <RotateCcw size={17} /> {t("practice-again")}
                 </button>
               </div>
             ) : (
@@ -597,10 +607,14 @@ function App() {
                   {showLetter && showRussian && <i />}
                   {showRussian && (
                     <div className="russian-name">
-                      <span className="russian">{d.russian}</span>
+                      <span className="russian">
+                        {language === "ru" ? d.russian : solfege(d.letter)}
+                      </span>
                       {s.octaveName && (
                         <small className="octave-name">
-                          {russianOctave(note)}
+                          {language === "ru"
+                            ? russianOctave(note)
+                            : t("octave-number", { number: octave(note) })}
                         </small>
                       )}
                     </div>
@@ -611,16 +625,14 @@ function App() {
                     <div className={"feedback " + feedback}>
                       {feedback === "correct" ? (
                         <>
-                          <Check size={23} /> Верно!
+                          <Check size={23} /> {t("correct")}
                         </>
                       ) : (
-                        <>Попробуй ещё раз</>
+                        <>{t("try-again")}</>
                       )}
                     </div>
                   ) : (
-                    <span className="hint">
-                      Нажми соответствующую клавишу на пианино
-                    </span>
+                    <span className="hint">{t("play-matching-key")}</span>
                   )}
                 </div>
               </>
@@ -630,56 +642,65 @@ function App() {
         {open && (
           <aside>
             <div className="aside-heading">
-              <h2>Настройки</h2>
-              <button title="Закрыть настройки" onClick={() => setOpen(false)}>
+              <h2>{t("settings")}</h2>
+              <button
+                title={t("close-settings")}
+                onClick={() => setOpen(false)}
+              >
                 <X size={21} />
               </button>
             </div>
             <div className="settings-scroll">
               <AudioNotices sound={sound} />
-              <SettingsSection title="Звук" {...sections.props("sound")}>
+              <SettingsSection
+                title={t("general")}
+                {...sections.props("general")}
+              >
+                <LanguageSelect />
+              </SettingsSection>
+              <SettingsSection title={t("sound")} {...sections.props("sound")}>
                 <AudioSettings sound={sound} />
               </SettingsSection>
               <SettingsSection
-                title="Отображение"
+                title={t("display")}
                 icon={<Monitor />}
                 {...sections.props("display")}
               >
-                {toggle("letter", "Буквенное обозначение")}
-                {toggle("russian", "Русское название")}
-                {toggle("octaveName", "Название октавы")}
-                {toggle("staff", "Нотный стан")}
+                {toggle("letter", t("letter-names"))}
+                {toggle("russian", t("do-re-mi-note-names"))}
+                {toggle("octaveName", t("octave-name"))}
+                {toggle("staff", t("staff"))}
               </SettingsSection>
               {training.mode === "custom" ? (
                 <>
                   <SettingsSection
-                    title="Диапазон"
+                    title={t("range")}
                     icon={<ArrowUpDown />}
                     {...sections.props("range")}
                   >
                     <div
                       className="range-modes"
                       role="group"
-                      aria-label="Диапазон заданий"
+                      aria-label={t("exercise-range")}
                     >
                       <button
                         aria-pressed={s.rangeMode === "octaves"}
                         onClick={() => update({ rangeMode: "octaves" })}
                       >
-                        Выбранные октавы
+                        {t("selected-octaves")}
                       </button>
                       <button
                         aria-pressed={s.rangeMode === "full"}
                         onClick={() => update({ rangeMode: "full" })}
                       >
-                        Вся клавиатура
+                        {t("full-keyboard")}
                       </button>
                     </div>
                     {s.rangeMode === "octaves" ? (
                       <div
                         className="octave-grid"
                         role="group"
-                        aria-label="Октавы заданий"
+                        aria-label={t("exercise-octaves")}
                       >
                         {availableOctaves(instrument).map((o) => {
                           const minimum = Math.max(
@@ -719,108 +740,104 @@ function App() {
                         {describe(instrument.minimum).letter}–
                         {describe(instrument.maximum).letter}{" "}
                         <span>
-                          · {instrument.maximum - instrument.minimum + 1} нот
+                          ·{" "}
+                          {t("note-count", {
+                            count: instrument.maximum - instrument.minimum + 1,
+                          })}
                         </span>
                       </p>
                     )}
                     <SelectField
-                      label="Клавиши"
+                      label={t("keys")}
                       value={s.chromatic ? "all" : "white"}
                       onChange={(v) => update({ chromatic: v === "all" })}
                       options={[
-                        { value: "white", label: "Только белые" },
-                        { value: "all", label: "Все клавиши" },
+                        { value: "white", label: t("white-keys-only") },
+                        { value: "all", label: t("all-keys") },
                       ]}
                     />
                     <SelectField
-                      label="Альтерации"
+                      label={t("accidentals")}
                       value={s.spelling}
                       disabled={!s.chromatic}
                       onChange={(v) =>
                         update({ spelling: v as Settings["spelling"] })
                       }
                       options={[
-                        { value: "sharp", label: "Диезы ♯" },
-                        { value: "flat", label: "Бемоли ♭" },
+                        { value: "sharp", label: t("sharps") },
+                        { value: "flat", label: t("flats") },
                       ]}
                     />
                   </SettingsSection>
                   <SettingsSection
-                    title="Нотация и проверка"
+                    title={t("notation-and-answers")}
                     icon={<Layers />}
                     {...sections.props("notation")}
                   >
                     <SelectField
-                      label="Ключ"
+                      label={t("clef")}
                       value={s.clef}
                       onChange={(v) => update({ clef: v as Settings["clef"] })}
                       options={[
-                        { value: "auto", label: "Автоматически" },
-                        { value: "treble", label: "Скрипичный" },
-                        { value: "bass", label: "Басовый" },
+                        { value: "auto", label: t("automatic") },
+                        { value: "treble", label: t("treble-clef") },
+                        { value: "bass", label: t("bass-clef") },
                       ]}
                     />
                     <SelectField
-                      label="Точность ответа"
+                      label={t("answer-accuracy")}
                       value={s.exact ? "exact" : "octave"}
                       onChange={(v) => update({ exact: v === "exact" })}
                       options={[
-                        { value: "exact", label: "Точная клавиша" },
-                        { value: "octave", label: "Любая октава" },
+                        { value: "exact", label: t("exact-key") },
+                        { value: "octave", label: t("any-octave") },
                       ]}
                     />
                   </SettingsSection>
                 </>
               ) : null}
               <SettingsSection
-                title="Тренировка"
+                title={t("training")}
                 icon={<SlidersHorizontal />}
                 {...sections.props("training")}
               >
                 {training.mode === "first" && (
-                  <p
-                    className="settings-note"
-                    title="Только белые клавиши. Диапазон, ключ и точность ответа настраиваются в своей тренировке."
-                  >
-                    Первые ноты · Скрипичный ключ · C4–
-                    {training.expanded ? "B4" : "G4"}
+                  <p className="settings-note" title={t("first-notes-rules")}>
+                    {t("first-notes-range", {
+                      end: training.expanded ? "B4" : "G4",
+                    })}
                   </p>
                 )}
                 <SelectField
-                  label="Заданий"
+                  label={t("exercises")}
                   value={String(s.count)}
                   onChange={(v) => update({ count: Number(v) })}
                   options={[
-                    { value: "0", label: "Бесконечно" },
-                    { value: "10", label: "10 нот" },
-                    { value: "20", label: "20 нот" },
-                    { value: "50", label: "50 нот" },
+                    { value: "0", label: t("unlimited") },
+                    { value: "10", label: t("10-notes") },
+                    { value: "20", label: t("20-notes") },
+                    { value: "50", label: t("50-notes") },
                   ]}
                 />
-                <p className="settings-note">
-                  Изменение диапазона или точности ответа начинает новую серию.
-                </p>
+                <p className="settings-note">{t("range-change-restarts")}</p>
               </SettingsSection>
               {sections.saveError && (
-                <p role="alert">Не удалось сохранить вид панели настроек.</p>
+                <p role="alert">{t("settings-layout-save-error")}</p>
               )}
-              {saveError && (
-                <p role="alert">
-                  Не удалось сохранить настройки на этом устройстве.
-                </p>
-              )}
+              {saveError && <p role="alert">{t("settings-save-error")}</p>}
               <details
                 className="settings-section"
                 open={aboutOpen}
                 onToggle={(event) => setAboutOpen(event.currentTarget.open)}
               >
-                <summary>О программе</summary>
+                <summary>{t("about")}</summary>
                 <p className="settings-note">
-                  {product.productName} · Версия {product.productVersion}
+                  {product.productName} ·{" "}
+                  {t("version", { version: product.productVersion })}
                 </p>
                 {updates.enabled && (
                   <button className="update-check" onClick={updates.check}>
-                    Проверить обновления
+                    {t("check-for-updates")}
                   </button>
                 )}
               </details>
@@ -841,29 +858,27 @@ function App() {
                 setKeys(!keys);
               }}
             >
-              <Keyboard size={17} /> Виртуальное пианино{" "}
+              <Keyboard size={17} /> {t("virtual-piano")}{" "}
               {keys ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
             </button>
             <button
               className="key-labels-toggle"
-              aria-label="Подписи клавиш"
+              aria-label={t("key-labels")}
               aria-pressed={keyLabels}
-              title={
-                keyLabels ? "Скрыть подписи клавиш" : "Показать подписи клавиш"
-              }
+              title={keyLabels ? t("hide-key-labels") : t("show-key-labels")}
               onClick={() => setKeyLabels((value) => !value)}
             >
               <span aria-hidden="true">Aa</span>
-              <span>Подписи</span>
+              <span>{t("labels")}</span>
             </button>
             <button
               className="key-labels-toggle"
-              aria-label="Подсветка клавиш"
+              aria-label={t("key-hints")}
               aria-pressed={keyHint}
               onClick={() => setKeyHint((value) => !value)}
             >
               <span aria-hidden="true">✦</span>
-              <span>Подсветка</span>
+              <span>{t("hints")}</span>
             </button>
           </div>
           {keys && (
@@ -949,11 +964,13 @@ function App() {
       <footer>
         <MIDIDeviceMenu midi={midi} calibration={calibration} sound={sound} />
         {sound.enabled && sound.status === "locked" && (
-          <button onClick={() => void audio.activate()}>Включить звук</button>
+          <button onClick={() => void audio.activate()}>
+            {t("enable-sound")}
+          </button>
         )}
         <div className="progress-area">
           <div className="progress-text">
-            <span>Прогресс</span>
+            <span>{t("progress")}</span>
             <strong>
               {correct} / {s.count || "∞"}
             </strong>
@@ -962,7 +979,7 @@ function App() {
             <div
               className="progress-track"
               role="progressbar"
-              aria-label="Прогресс тренировки"
+              aria-label={t("training-progress")}
               aria-valuemin={0}
               aria-valuemax={s.count}
               aria-valuenow={correct}
@@ -976,19 +993,19 @@ function App() {
               />
             </div>
           )}
-          <small className="errors">Ошибки: {wrong}</small>
+          <small className="errors">{t("errors", { count: wrong })}</small>
         </div>
         <button
           className={"settings-button " + (open ? "selected" : "")}
           onClick={() => setOpen(!open)}
         >
           <Gear size={20} />
-          <span>Настройки</span>
+          <span>{t("settings")}</span>
           {open ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
         </button>
         <button
           className="reset"
-          title="Начать заново"
+          title={t("start-over")}
           onClick={() => restart()}
         >
           <RotateCcw size={17} />
@@ -1003,4 +1020,8 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <LanguageProvider>
+    <App />
+  </LanguageProvider>,
+);

@@ -1,3 +1,4 @@
+import { midiMessage, useLanguage } from "./i18n";
 import { useEffect, useId, useRef, useState } from "react";
 import { Keyboard, ChevronUp, ChevronDown, RotateCcw } from "lucide-react";
 import { describe } from "./model";
@@ -19,6 +20,7 @@ export function MIDIDeviceMenu({
   const soundDescription = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const { t } = useLanguage();
   const { state, pending, last, warning, select, refresh } = midi;
   useEffect(() => {
     if (!open) return;
@@ -43,14 +45,14 @@ export function MIDIDeviceMenu({
   }, [open]);
   const connected = state.status === "connected";
   const subtitle = pending
-    ? "Подключение…"
+    ? t("connecting")
     : connected
-      ? "Подключено (MIDI)"
+      ? t("connected-midi")
       : state.status === "error"
-        ? "MIDI недоступно"
+        ? t("midi-unavailable")
         : state.devices.length
-          ? "MIDI не подключено"
-          : "MIDI-устройства не обнаружены";
+          ? t("midi-disconnected")
+          : t("no-midi-devices-found");
   return (
     <div
       className="midi-device-root"
@@ -66,7 +68,7 @@ export function MIDIDeviceMenu({
       <button
         ref={trigger}
         className="device device-trigger"
-        aria-label="Устройство ввода"
+        aria-label={t("input-device")}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -76,7 +78,7 @@ export function MIDIDeviceMenu({
           <Keyboard />
         </span>
         <span className="device-caption">
-          <strong>{state.selected?.name ?? "Виртуальная клавиатура"}</strong>
+          <strong>{state.selected?.name ?? t("virtual-keyboard")}</strong>
           <small>{subtitle}</small>
         </span>
         {open ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -85,13 +87,13 @@ export function MIDIDeviceMenu({
         <section
           className="midi-menu"
           role="dialog"
-          aria-label="Устройство ввода"
+          aria-label={t("input-device")}
         >
-          <h3>Устройство ввода</h3>
+          <h3>{t("input-device")}</h3>
           <div
             className="midi-choices"
             role="group"
-            aria-label="Источники ввода"
+            aria-label={t("input-sources")}
           >
             <button
               disabled={pending}
@@ -99,11 +101,11 @@ export function MIDIDeviceMenu({
               onClick={() => select(null)}
             >
               <span aria-hidden="true">{!connected ? "●" : "○"}</span>{" "}
-              Виртуальная клавиатура
+              {t("virtual-keyboard")}
             </button>
-            <p>Доступные MIDI-устройства</p>
+            <p>{t("available-midi-devices")}</p>
             {!state.devices.length && (
-              <small>MIDI-устройства не обнаружены</small>
+              <small>{t("no-midi-devices-found")}</small>
             )}
             {state.devices.map((device, index) => (
               <button
@@ -122,7 +124,7 @@ export function MIDIDeviceMenu({
                   {device.name}
                   {state.devices.filter((d) => d.identity === device.identity)
                     .length > 1
-                    ? ` · порт ${index + 1}`
+                    ? ` · ${t("port-number", { number: index + 1 })}`
                     : ""}
                 </span>
               </button>
@@ -132,18 +134,18 @@ export function MIDIDeviceMenu({
             <div className="midi-sound">
               <SoundToggle sound={sound} descriptionId={soundDescription} />
               <p id={soundDescription} className="settings-note">
-                Воспроизводить звук нажатых клавиш через динамики компьютера.
+                {t("midi-speaker-hint")}
               </p>
             </div>
           )}
           {state.message && (
             <p role="alert" className="midi-message">
-              {state.message}
+              {midiMessage(t, state.message)}
             </p>
           )}
           {warning && (
             <p role="status" className="midi-message">
-              {warning}
+              {t(warning)}
             </p>
           )}
           {state.status === "error" && state.selected && (
@@ -152,31 +154,31 @@ export function MIDIDeviceMenu({
               disabled={pending}
               onClick={() => select(state.selected)}
             >
-              Повторить подключение
+              {t("reconnect")}
             </button>
           )}
           <button className="midi-refresh" disabled={pending} onClick={refresh}>
-            <RotateCcw size={14} /> {pending ? "Подождите…" : "Обновить список"}
+            <RotateCcw size={14} />{" "}
+            {pending ? t("please-wait") : t("refresh-devices")}
           </button>
           {connected && (
             <div className="device-calibration">
               {calibration.profile ? (
                 <p>
-                  Диапазон: {describe(calibration.profile.lowerMidiNote).letter}
-                  –{describe(calibration.profile.upperMidiNote).letter}
+                  {t("calibrated-range", {
+                    lower: describe(calibration.profile.lowerMidiNote).letter,
+                    upper: describe(calibration.profile.upperMidiNote).letter,
+                  })}
                   <small>
                     MIDI: {calibration.profile.lowerMidiNote}–
                     {calibration.profile.upperMidiNote}
                   </small>
                 </p>
               ) : (
-                <p>Диапазон не определён</p>
+                <p>{t("range-not-calibrated")}</p>
               )}
               {calibration.ambiguous && (
-                <small>
-                  Одинаковые MIDI-входы: сохранённый диапазон не применяется
-                  автоматически.
-                </small>
+                <small>{t("midi-range-ambiguous")}</small>
               )}
               <button
                 onClick={() => {
@@ -184,17 +186,20 @@ export function MIDIDeviceMenu({
                   calibration.open();
                 }}
               >
-                {calibration.profile
-                  ? "Определить заново"
-                  : "Определить диапазон"}
+                {calibration.profile ? t("recalibrate") : t("calibrate-range")}
               </button>
             </div>
           )}
           {connected && (
             <small className="midi-diagnostic" aria-live="polite">
               {last
-                ? `Последняя нота: ${describe(last.note).letter} · MIDI ${last.note} · канал ${last.channel} · сила ${last.velocity}`
-                : "Ожидаем нажатия на инструменте"}
+                ? t("last-note", {
+                    name: describe(last.note).letter,
+                    note: last.note,
+                    channel: last.channel,
+                    velocity: last.velocity,
+                  })
+                : t("waiting-for-a-key-press")}
             </small>
           )}
         </section>

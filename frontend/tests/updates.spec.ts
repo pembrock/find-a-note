@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { mkdir } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
+import config from "../../wails.json" with { type: "json" };
 
 async function launch(
   page: Page,
@@ -15,7 +16,7 @@ async function launch(
   await page.addInitScript(
     ({ phase, result, notice, notes, total }) => {
       const offer = {
-        version: "0.2.3",
+        version: "0.3.1",
         notes,
         progress: 0,
         received: 0,
@@ -95,6 +96,24 @@ async function launch(
 
 const badgeFor = (page: Page) =>
   page.getByRole("button", { name: "Обновления Find a Note" });
+
+test("switches signed-note language without closing the update dialog", async ({ page }) => {
+  await page.setViewportSize({ width: 760, height: 560 });
+  const englishNotes = "- English notes\n" + "uninterruptedtext".repeat(64);
+  await launch(page, { notes: `English\n\n${englishNotes}\n\nРусский\n\n- Русские заметки` });
+  await badgeFor(page).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("region")).toHaveText("- Русские заметки");
+  await dialog.getByRole("combobox", { name: "Язык приложения" }).selectOption("en");
+  await expect(dialog.getByRole("heading", { name: "Update available" })).toBeVisible();
+  const notes = dialog.getByRole("region");
+  await expect(notes).toHaveText(englishNotes);
+  for (const [width, height] of [[760, 560], [900, 600], [1920, 1032]]) {
+    await page.setViewportSize({ width, height });
+    await expect(dialog.getByRole("button", { name: "Update", exact: true })).toBeInViewport();
+    expect(await notes.evaluate((node) => node.scrollWidth === node.clientWidth)).toBe(true);
+  }
+});
 async function manualCheck(page: Page) {
   await page.getByTitle("Настройки", { exact: true }).click();
   await page.getByText("О программе", { exact: true }).click();
@@ -112,8 +131,8 @@ test("background offer, keyboard navigation and focus restoration", async ({
   await expect(
     dialog.getByRole("heading", { name: "Доступно обновление" }),
   ).toBeFocused();
-  await expect(dialog.getByText("Find a Note 0.2.3")).toBeVisible();
-  await expect(dialog.getByText("Установлена версия 0.2.2")).toBeVisible();
+  await expect(dialog.getByText("Find a Note 0.3.1")).toBeVisible();
+  await expect(dialog.getByText(`Установлена версия ${config.info.productVersion}`)).toBeVisible();
   await expect(page.getByText("О программе", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Tab");
   await expect(dialog.getByRole("region")).toBeFocused();

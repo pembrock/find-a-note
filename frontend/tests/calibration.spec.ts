@@ -180,6 +180,28 @@ async function calibrate(page: Page, lower: number, upper: number) {
     .click();
 }
 
+test("language changes preserve the connected MIDI session and calibration boundary", async ({ page }) => {
+  await page.setViewportSize({ width: 760, height: 560 });
+  await setup(page);
+  await wizard(page).getByRole("button", { name: "Начать", exact: true }).click();
+  await send(page, 21);
+  await send(page, 20);
+  await expect(wizard(page).getByRole("alert")).toContainText("выше левой");
+  await wizard(page).getByRole("combobox", { name: "Язык приложения" }).selectOption("en");
+  const dialog = page.getByRole("dialog", { name: "Calibrate your keyboard range" });
+  await expect(dialog.getByRole("alert")).toContainText("higher than the left key");
+  await expect(dialog.locator(".calibration-cards .complete h2")).toHaveText("A0");
+  await send(page, 108);
+  const result = page.getByRole("dialog", { name: "Range calibrated" });
+  await expect(result).toContainText("88 notes");
+  for (const [width, height] of [[760, 560], [900, 600], [1920, 1032]]) {
+    await page.setViewportSize({ width, height });
+    await expect(result.getByRole("button", { name: "Save", exact: true })).toBeInViewport();
+  }
+  await result.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Input device" })).toContainText("Test Piano A");
+});
+
 test("optional wizard routes only MIDI, validates boundaries and saves only explicit confirmation", async ({
   page,
 }) => {

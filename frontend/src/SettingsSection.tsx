@@ -2,8 +2,8 @@ import { useId, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
 const storageKey = "sonari.settings.sections.v1";
-export type SectionId = "sound" | "display" | "range" | "notation" | "training";
-const ids: SectionId[] = ["sound", "display", "range", "notation", "training"];
+export type SectionId = "general" | "sound" | "display" | "range" | "notation" | "training";
+const ids: SectionId[] = ["general", "sound", "display", "range", "notation", "training"];
 type Expanded = Partial<Record<SectionId, boolean>>;
 function load(): Expanded {
   try {
