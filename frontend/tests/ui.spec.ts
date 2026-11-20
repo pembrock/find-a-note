@@ -281,13 +281,24 @@ test("responsive layout and musical SVGs in both clefs and extreme registers", a
       expect(await svg.locator("path").count()).toBeGreaterThan(2);
       await expect(svg).toHaveAttribute("data-written-midi", String(midi));
       await expect(svg.locator(".vf-annotation")).toHaveCount(0);
-      expect(
-        await svg.evaluate((el) => {
-          const b = (el as SVGGraphicsElement).getBBox(),
-            v = (el as SVGSVGElement).viewBox.baseVal;
-          return b.y < v.y || b.y + b.height > v.y + v.height;
-        }),
-      ).toBeFalsy();
+      // A resize redraw can replace the SVG between locator resolution and
+      // evaluation. Find and measure the current SVG in one browser callback.
+      const bounds = await page.locator(".staff").evaluate((staff) => {
+        const score = staff.querySelector("svg")!;
+        const box = score.getBBox();
+        const viewBox = score.viewBox.baseVal;
+        return {
+          height: box.height,
+          top: box.y,
+          bottom: box.y + box.height,
+          viewTop: viewBox.y,
+          viewBottom: viewBox.y + viewBox.height,
+        };
+      });
+      const context = `clef=${clef}, octave=${oct}, MIDI=${midi}`;
+      expect(bounds.height, context).toBeGreaterThan(0);
+      expect(bounds.top, context).toBeGreaterThanOrEqual(bounds.viewTop);
+      expect(bounds.bottom, context).toBeLessThanOrEqual(bounds.viewBottom);
     }
 });
 
