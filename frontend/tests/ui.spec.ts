@@ -302,23 +302,23 @@ test("responsive layout and musical SVGs in both clefs and extreme registers", a
     }
 });
 
-test("D5 in bass and A0/C8 in forced clefs never transpose or clip", async ({
-  page,
-}) => {
-  await page.addInitScript(() => {
-    Math.random = () => 0.2;
-  });
-  await page.goto("/");
-  for (const viewport of [
-    { width: 900, height: 600 },
-    { width: 760, height: 560 },
+for (const viewport of [
+  { width: 900, height: 600 },
+  { width: 760, height: 560 },
+]) {
+  for (const [oct, expected] of [
+    [5, 74],
+    [0, 21],
+    [8, 108],
   ]) {
-    await page.setViewportSize(viewport);
-    for (const [oct, expected] of [
-      [5, 74],
-      [0, 21],
-      [8, 108],
-    ])
+    test(`MIDI ${expected} never transposes or clips at ${viewport.width}×${viewport.height}`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        Math.random = () => 0.2;
+      });
+      await page.setViewportSize(viewport);
+      await page.goto("/");
       for (const clef of ["bass", "treble", "auto"])
         for (const spelling of ["sharp", "flat"]) {
           await page.evaluate(
@@ -379,8 +379,9 @@ test("D5 in bass and A0/C8 in forced clefs never transpose or clip", async ({
             piano = await page.locator(".piano-panel").boundingBox();
           expect(names!.y + names!.height).toBeLessThanOrEqual(piano!.y + 1);
         }
+    });
   }
-});
+}
 
 test("hidden names reveal only on success, remain locked for 1200ms and reset", async ({
   page,
