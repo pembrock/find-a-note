@@ -346,20 +346,34 @@ test("D5 in bass and A0/C8 in forced clefs never transpose or clip", async ({
           await expect(page.locator("main")).not.toContainText(
             /8va|8vb|15ma|15mb/,
           );
-          const geometry = await svg.evaluate((el) => {
-            const b = (el as SVGGraphicsElement).getBBox(),
-              v = (el as SVGSVGElement).viewBox.baseVal;
+          const geometry = await page.locator(".staff").evaluate((staff) => {
+            const score = staff.querySelector("svg")!;
+            const box = score.getBBox();
+            const viewBox = score.viewBox.baseVal;
             return {
-              inside:
-                b.x >= v.x &&
-                b.y >= v.y &&
-                b.x + b.width <= v.x + v.width &&
-                b.y + b.height <= v.y + v.height,
-              paths: el.querySelectorAll("path").length,
+              box: { x: box.x, y: box.y, width: box.width, height: box.height },
+              viewBox: {
+                x: viewBox.x,
+                y: viewBox.y,
+                width: viewBox.width,
+                height: viewBox.height,
+              },
+              paths: score.querySelectorAll("path").length,
             };
           });
-          expect(geometry.inside).toBeTruthy();
-          expect(geometry.paths).toBeGreaterThan(2);
+          const { box, viewBox, paths } = geometry;
+          const context = `clef=${clef}, spelling=${spelling}, MIDI=${expected}, viewport=${viewport.width}×${viewport.height}`;
+          expect(box.width, context).toBeGreaterThan(0);
+          expect(box.height, context).toBeGreaterThan(0);
+          expect(box.x, context).toBeGreaterThanOrEqual(viewBox.x);
+          expect(box.y, context).toBeGreaterThanOrEqual(viewBox.y);
+          expect(box.x + box.width, context).toBeLessThanOrEqual(
+            viewBox.x + viewBox.width,
+          );
+          expect(box.y + box.height, context).toBeLessThanOrEqual(
+            viewBox.y + viewBox.height,
+          );
+          expect(paths, context).toBeGreaterThan(2);
           await page.locator(".note-names").scrollIntoViewIfNeeded();
           const names = await page.locator(".note-names").boundingBox(),
             piano = await page.locator(".piano-panel").boundingBox();
