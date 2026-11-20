@@ -14,17 +14,17 @@ import (
 	"testing"
 )
 
-const commonNotes = "English\n\n- Release notes\n\nРусский\n\n- Заметки о выпуске"
+const commonNotes = "## English\n\n- Release notes\n\n## Русский\n\n- Заметки о выпуске"
 
-// This fixture deliberately uses only APIs present in both legacy tags.
+// This fixture deliberately uses only APIs present in the legacy tags.
 func commonRelease(t *testing.T) (Manifest, map[string][]byte) {
 	t.Helper()
-	m := Manifest{Schema: 1, Product: "find-a-note", Version: "0.4.0", Notes: commonNotes}
+	m := Manifest{Schema: 1, Product: "find-a-note", Version: "0.4.1", Notes: commonNotes}
 	files := map[string][]byte{}
 	for _, p := range []Package{
-		{OS: "windows", Arch: "amd64", Kind: "installer", Name: "Find-a-Note-0.4.0-Windows-Setup.exe", Method: "nsis-stage-v1"},
-		{OS: "darwin", Arch: "arm64", Kind: "dmg", Name: "Find-a-Note-0.4.0-macOS-arm64.dmg", Method: "manual-dmg"},
-		{OS: "windows", Arch: "amd64", Kind: "portable", Name: "Find-a-Note-0.4.0-Windows-Portable.exe", Method: "replace-exe"},
+		{OS: "windows", Arch: "amd64", Kind: "installer", Name: "Find-a-Note-0.4.1-Windows-Setup.exe", Method: "nsis-stage-v1"},
+		{OS: "darwin", Arch: "arm64", Kind: "dmg", Name: "Find-a-Note-0.4.1-macOS-arm64.dmg", Method: "manual-dmg"},
+		{OS: "windows", Arch: "amd64", Kind: "portable", Name: "Find-a-Note-0.4.1-Windows-Portable.exe", Method: "replace-exe"},
 	} {
 		data := []byte("unsigned package fixture " + p.Kind)
 		sum := sha256.Sum256(data)
@@ -96,7 +96,7 @@ func localGitHub(t *testing.T, tag string, files map[string][]byte, apiStatus in
 }
 
 func TestCommonReleaseWindows(t *testing.T) {
-	for _, old := range []string{"0.2.2", "0.3.0"} {
+	for _, old := range []string{"0.2.2", "0.3.0", "0.4.0"} {
 		for _, kind := range []string{"installer", "portable"} {
 			t.Run(old+"/"+kind, func(t *testing.T) {
 				m, files := commonRelease(t)

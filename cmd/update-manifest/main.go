@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"flag"
@@ -27,17 +28,29 @@ func main() {
 	dir := flag.String("dir", "", "directory of the release assets")
 	notes := flag.String("notes", "", "optional UTF-8 release summary")
 	macOS := flag.Bool("macos", false, "include the matching macOS arm64 DMG")
+	verify := flag.Bool("verify", false, "verify the signed manifest against the release files and pinned key")
+	index := flag.String("package-index", "", "expected package sizes and SHA-256 from the verified CI bundle")
 	flag.Parse()
-	if err := sign(*key, *version, *dir, *notes, *macOS); err != nil {
+	var err error
+	if *verify {
+		if *key != "" {
+			log.Fatal("-verify does not accept a private key")
+		}
+		err = verifyRelease(*version, *dir, *notes, *macOS, *index, update.PublicKey())
+	} else {
+		err = sign(*key, *version, *dir, *notes, *macOS, *index)
+	}
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func sign(keyPath, version, dir, notesPath string, macOS bool) error {
+func sign(keyPath, version, dir, notesPath string, macOS bool, index string) error {
 	if keyPath == "" || dir == "" {
 		return errors.New("-key and -dir are required")
 	}
-	if _, err := update.ParseVersion(version); err != nil {
+	data, err := checkedManifest(version, dir, notesPath, macOS, index)
+	if err != nil {
 		return err
 	}
 	private, err := loadKey(keyPath)
@@ -45,16 +58,12 @@ func sign(keyPath, version, dir, notesPath string, macOS bool) error {
 		return err
 	}
 	defer clear(private)
-	m, err := releaseManifest(version, dir, notesPath, macOS)
-	if err != nil {
-		return err
-	}
-	data, err := update.CanonicalManifest(m)
-	if err != nil {
-		return err
-	}
+	return signManifest(dir, data, private, update.PublicKey())
+}
+
+func signManifest(dir string, data []byte, private ed25519.PrivateKey, public ed25519.PublicKey) error {
 	sig := ed25519.Sign(private, data)
-	if _, err := update.VerifyManifest(data, sig, update.PublicKey()); err != nil {
+	if _, err := update.VerifyManifest(data, sig, public); err != nil {
 		return err
 	}
 	if err := writeNew(filepath.Join(dir, update.ManifestName), data); err != nil {
@@ -63,6 +72,64 @@ func sign(keyPath, version, dir, notesPath string, macOS bool) error {
 	if err := writeNew(filepath.Join(dir, update.SignatureName), sig); err != nil {
 		_ = os.Remove(filepath.Join(dir, update.ManifestName))
 		return err
+	}
+	return nil
+}
+
+func checkedManifest(version, dir, notesPath string, macOS bool, index string) ([]byte, error) {
+	if dir == "" {
+		return nil, errors.New("-dir is required")
+	}
+	if _, err := update.ParseVersion(version); err != nil {
+		return nil, err
+	}
+	m, err := releaseManifest(version, dir, notesPath, macOS)
+	if err != nil {
+		return nil, err
+	}
+	if index != "" {
+		type packageInfo struct {
+			Size   int64  `json:"size"`
+			SHA256 string `json:"sha256"`
+		}
+		var expected map[string]packageInfo
+		raw, err := os.ReadFile(index)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(raw, &expected); err != nil {
+			return nil, err
+		}
+		if len(expected) != len(m.Packages) {
+			return nil, errors.New("unexpected package index")
+		}
+		for _, p := range m.Packages {
+			if expected[p.Name] != (packageInfo{Size: p.Size, SHA256: p.SHA256}) {
+				return nil, errors.New("package differs from verified CI artifact: " + p.Name)
+			}
+		}
+	}
+	return update.CanonicalManifest(m)
+}
+
+func verifyRelease(version, dir, notes string, macOS bool, index string, public ed25519.PublicKey) error {
+	expected, err := checkedManifest(version, dir, notes, macOS, index)
+	if err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, update.ManifestName))
+	if err != nil {
+		return err
+	}
+	sig, err := os.ReadFile(filepath.Join(dir, update.SignatureName))
+	if err != nil {
+		return err
+	}
+	if _, err := update.VerifyManifest(raw, sig, public); err != nil {
+		return err
+	}
+	if !bytes.Equal(expected, raw) {
+		return errors.New("signed manifest does not match release files")
 	}
 	return nil
 }
@@ -109,7 +176,7 @@ func loadKey(path string) (ed25519.PrivateKey, error) {
 	}
 	absolute, err = filepath.EvalSymlinks(absolute)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("could not resolve the external signing key")
 	}
 	root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
