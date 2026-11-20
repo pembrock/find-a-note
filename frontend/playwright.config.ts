@@ -1,4 +1,9 @@
 import { defineConfig } from "@playwright/test";
+// Keep Windows/Edge parity by default; opt in on hosts without Edge.
+const browser = process.env.PLAYWRIGHT_BROWSER ?? "msedge";
+if (!["msedge", "chromium", "webkit"].includes(browser)) {
+  throw new Error(`Unsupported PLAYWRIGHT_BROWSER: ${browser}`);
+}
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: false,
@@ -6,8 +11,8 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:5173",
-    browserName: "chromium",
-    channel: "msedge",
+    browserName: browser === "webkit" ? "webkit" : "chromium",
+    ...(browser === "msedge" ? { channel: "msedge" } : {}),
     locale: "ru-RU",
     headless: true,
   },

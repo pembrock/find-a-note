@@ -513,7 +513,11 @@ function App() {
               className="update-badge"
               title={t("find-a-note-updates")}
               aria-label={t("find-a-note-updates")}
-              onClick={updates.show}
+              onClick={(event) => {
+                // WebKit does not focus buttons on pointer click by default.
+                event.currentTarget.focus();
+                updates.show();
+              }}
             >
               <Download size={17} />
             </button>
@@ -847,7 +851,13 @@ function App() {
                   {t("version", { version: product.productVersion })}
                 </p>
                 {updates.enabled && (
-                  <button className="update-check" onClick={updates.check}>
+                  <button
+                    className="update-check"
+                    onClick={(event) => {
+                      event.currentTarget.focus();
+                      updates.check();
+                    }}
+                  >
                     {t("check-for-updates")}
                   </button>
                 )}

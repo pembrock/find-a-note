@@ -27,7 +27,10 @@ test("manual selection keeps the current exercise and preferences and survives r
   await page.goto("/");
   const note = page.locator(".staff svg");
   const current = await note.getAttribute("data-midi");
-  await page.locator(`.piano button.white-key:not([data-midi="${current}"])`).first().click();
+  await page
+    .locator(`.piano button.white-key:not([data-midi="${current}"])`)
+    .first()
+    .click();
   await expect(page.locator(".errors")).toHaveText("Ошибки: 1");
   await page.getByTitle("Настройки", { exact: true }).click();
   await page.getByRole("button", { name: "Общие", exact: true }).click();
@@ -68,6 +71,19 @@ for (const language of ["ru", "en"] as const) {
         language,
       );
       await page.goto("/");
+      // MAC-03: font metrics in WebKit must not wrap the training value.
+      const training = page.locator(".training-controls .select-trigger");
+      expect(
+        await training.evaluate((node) => {
+          const text = node.firstElementChild!;
+          const range = document.createRange();
+          range.selectNodeContents(text);
+          return range.getClientRects().length;
+        }),
+      ).toBe(1);
+      expect(
+        await training.evaluate((node) => node.scrollWidth <= node.clientWidth),
+      ).toBe(true);
       const settings = language === "ru" ? "Настройки" : "Settings";
       await page.getByTitle(settings, { exact: true }).click();
       await page

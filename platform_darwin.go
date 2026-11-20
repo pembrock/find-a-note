@@ -8,5 +8,8 @@ import (
 func configurePlatform(app *options.App) {
 	// Native frame also enables Wails' standard Application/Edit/Window menus.
 	app.Frameless = false
-	app.Mac = &mac.Options{TitleBar: mac.TitleBarDefault(), Appearance: mac.NSAppearanceNameDarkAqua}
+	app.Mac = &mac.Options{
+		TitleBar: mac.TitleBarDefault(), Appearance: mac.NSAppearanceNameDarkAqua,
+		Preferences: &mac.Preferences{TabFocusesLinks: mac.Enabled},
+	}
 }

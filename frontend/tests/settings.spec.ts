@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("sections default closed, toggle independently by keyboard and retain only presentation state", async ({
   page,
+  browserName,
 }) => {
   await page.addInitScript(() =>
     localStorage.setItem(
@@ -33,7 +34,8 @@ test("sections default closed, toggle independently by keyboard and retain only 
     note: document.querySelector(".staff svg")?.getAttribute("data-midi"),
   }));
   await sound.focus();
-  await page.keyboard.press("Tab");
+  // macOS WebKit's default browser policy uses Option-Tab for all controls.
+  await page.keyboard.press(process.platform === "darwin" && browserName === "webkit" ? "Alt+Tab" : "Tab");
   await expect(display).toBeFocused();
   await page.keyboard.press("Enter");
   await sound.focus();

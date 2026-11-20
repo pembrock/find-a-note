@@ -122,7 +122,9 @@ async function manualCheck(page: Page) {
 
 test("background offer, keyboard navigation and focus restoration", async ({
   page,
+  browserName,
 }) => {
+  const tab = process.platform === "darwin" && browserName === "webkit" ? "Alt+Tab" : "Tab";
   await launch(page);
   const badge = badgeFor(page);
   await badge.focus();
@@ -134,16 +136,16 @@ test("background offer, keyboard navigation and focus restoration", async ({
   await expect(dialog.getByText("Find a Note 0.3.1")).toBeVisible();
   await expect(dialog.getByText(`Установлена версия ${config.info.productVersion}`)).toBeVisible();
   await expect(page.getByText("О программе", { exact: true })).toHaveCount(0);
-  await page.keyboard.press("Tab");
+  await page.keyboard.press(tab);
   await expect(dialog.getByRole("region")).toBeFocused();
-  await page.keyboard.press("Tab");
+  await page.keyboard.press(tab);
   await expect(dialog.getByRole("button", { name: "Позже" })).toBeFocused();
   expect(
     await dialog
       .getByRole("button", { name: "Позже" })
       .evaluate((node) => getComputedStyle(node).outlineStyle),
   ).toBe("solid");
-  await page.keyboard.press("Tab");
+  await page.keyboard.press(tab);
   await expect(dialog.getByRole("button", { name: "Обновить" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);

@@ -3,12 +3,31 @@ import { rememberExpandedSettings } from "./settings-fixture";
 test.beforeEach(async ({ page }) => {
   await rememberExpandedSettings(page);
 });
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  await testInfo.attach("web-audio-state", {
+    body: JSON.stringify(
+      await page.evaluate(() => ({
+        log: (window as any).__audioLog,
+        contexts: ((window as any).__audioContexts ?? []).map(
+          (context: AudioContext) => ({
+            state: context.state,
+            currentTime: context.currentTime,
+            sampleRate: context.sampleRate,
+          }),
+        ),
+      })),
+    ),
+    contentType: "application/json",
+  });
+});
 
 async function prepare(page: Page) {
   await page.addInitScript(() => {
     Math.random = () => 0;
     const log: any[] = [];
     (window as any).__audioLog = log;
+    (window as any).__audioContexts = [];
     const setGain = AudioParam.prototype.setValueAtTime;
     AudioParam.prototype.setValueAtTime = function (
       value: number,
@@ -21,12 +40,16 @@ async function prepare(page: Page) {
     AudioBufferSourceNode.prototype.start = function (
       ...args: Parameters<typeof start>
     ) {
-      if (this.buffer && this.buffer.duration > 0.1)
+      if (this.buffer && this.buffer.duration > 0.1) {
+        if (!(window as any).__audioContexts.includes(this.context))
+          (window as any).__audioContexts.push(this.context);
         log.push({
           type: "start",
           rate: this.playbackRate.value,
           duration: this.buffer.duration,
+          time: this.context.currentTime,
         });
+      }
       return start.apply(this, args);
     };
     const stop = AudioBufferSourceNode.prototype.stop;
@@ -123,11 +146,14 @@ async function prepare(page: Page) {
     );
   });
   // Only the local app is reachable, including during initial sample loading.
-  await page.route("**/*", (route) =>
-    new URL(route.request().url()).hostname === "127.0.0.1"
+  await page.route("**/*", (route) => {
+    const url = new URL(route.request().url());
+    // WebKit routes Tone's locally generated clock-worker blobs too.
+    // They perform no network request; external origins remain blocked.
+    return url.origin === "http://127.0.0.1:5173"
       ? route.continue()
-      : route.abort(),
-  );
+      : route.abort();
+  });
   await page.goto("/");
   await page
     .getByRole("button", { name: "Настройки", exact: true })
@@ -165,6 +191,13 @@ test("local decoded piano: pointer hold/release, cancellation, volume and persis
   await key.dispatchEvent("pointerdown", { button: 0, pointerId: 8 });
   await key.dispatchEvent("pointerout", { pointerId: 8 });
   await expect.poll(() => count(page, "stop")).toBe(stops + 2);
+  const repeats = await count(page, "start");
+  for (let pointerId = 20; pointerId < 25; pointerId++) {
+    await key.dispatchEvent("pointerdown", { button: 0, pointerId });
+    await key.dispatchEvent("pointerup", { pointerId });
+  }
+  expect(await count(page, "start")).toBe(repeats + 5);
+  await expect.poll(() => count(page, "stop")).toBe(stops + 7);
   await page.getByRole("slider", { name: "Громкость" }).fill("25");
   await page.getByRole("switch", { name: "Воспроизводить звук" }).click();
   await page.reload();

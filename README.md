@@ -38,7 +38,7 @@ go test ./...
 go vet ./...
 ```
 
-The Playwright tests use Microsoft Edge and start a local Vite server. The frontend build generates the files required by the Go embed directive.
+The Playwright tests use Microsoft Edge by default and start a local Vite server. The frontend build generates the files required by the Go embed directive. On macOS without Edge, install the pinned browser with `npx playwright install chromium` inside `frontend`, then run `PLAYWRIGHT_BROWSER=chromium npm run test:ui`. `PLAYWRIGHT_BROWSER=webkit` selects the separately installed Playwright WebKit for additional checks; it does not replace native WKWebView validation. See [MAC-03](docs/macos/MAC-03-AUDIO-WEBKIT.md) for results and limitations.
 
 ## Local macOS build (Apple Silicon)
 

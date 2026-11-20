@@ -147,7 +147,16 @@ test("migration, disjoint octaves, styled menus and keyboard dismissal", async (
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(select).toBeFocused();
   await select.click();
-  await page.locator(".brand").click({ force: true });
+  // Radix mounts its dismissable layer and moves focus asynchronously.
+  await expect(
+    page.getByRole("option", { name: "Все клавиши", exact: true }),
+  ).toBeFocused();
+  // The modal makes body descendants inert. Click the actual hit-test target
+  // at the brand position, allowing Playwright's normal stability checks.
+  const brand = (await page.locator(".brand").boundingBox())!;
+  await page.locator("html").click({
+    position: { x: brand.x + brand.width / 2, y: brand.y + brand.height / 2 },
+  });
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await page
     .getByRole("button", { name: "Вся клавиатура", exact: true })
@@ -464,8 +473,8 @@ test("desktop text cannot be selected, editable fields retain selection and keyb
     expect(await field.evaluate((el) => getComputedStyle(el).userSelect)).toBe(
       "text",
     );
-    await field.press("Home");
-    await field.press("Shift+End");
+    await field.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
+    await field.press(process.platform === "darwin" ? "Meta+Shift+ArrowRight" : "Shift+End");
     const selected = await field.evaluate((el) =>
       el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
         ? el.value.slice(el.selectionStart || 0, el.selectionEnd || 0)
