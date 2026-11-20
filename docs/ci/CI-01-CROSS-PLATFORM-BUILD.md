@@ -15,7 +15,7 @@ merge commit GitHub. Обе сборки проверяют HEAD и архите
 | Node.js | 24.2.0, зависимости из `frontend/package-lock.json` через `npm ci` |
 | Wails CLI | 2.17.0, версия сверяется с модулем Go |
 | NSIS | 3.12.0 из Chocolatey, проверяется версия `makensis` |
-| Python | 3.12.12; утилиты DMG из `build/darwin/dmg/requirements.txt` |
+| Python | 3.13.14; утилиты DMG из `build/darwin/dmg/requirements.txt` |
 | GitHub Actions | Официальные actions закреплены полными commit SHA |
 
 GitHub относит `macos-15` к Apple Silicon. SDK, Xcode и системный Edge
