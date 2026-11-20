@@ -388,7 +388,9 @@ test("hidden names reveal only on success, remain locked for 1200ms and reset", 
   await page.addInitScript(() => {
     Math.random = () => 0.27;
   });
+  await page.clock.install();
   await page.goto("/");
+  await page.clock.pauseAt(Date.now() + 1000);
   for (const spelling of ["sharp", "flat"] as const)
     for (const [letter, russian] of [
       [false, false],
@@ -437,13 +439,16 @@ test("hidden names reveal only on success, remain locked for 1200ms and reset", 
         "1",
       );
       if (!letter || !russian) {
-        await page.waitForTimeout(750);
+        await page.clock.runFor(1199);
         await expect(page.locator(".staff svg")).toHaveAttribute(
           "data-midi",
           "63",
         );
         await page.locator('.white-key[data-midi="60"]').click();
         await expect(page.locator(".errors")).toHaveText("Ошибки: 1");
+        await page.clock.runFor(1);
+      } else {
+        await page.clock.runFor(650);
       }
       await expect(page.locator(".staff svg")).not.toHaveAttribute(
         "data-midi",
