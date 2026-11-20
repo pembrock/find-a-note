@@ -118,11 +118,21 @@ export function LanguageSelect() {
 }
 
 export function localizedNotes(notes: string, language: Language) {
-  const sections = /^English\n\n([\s\S]+?)\n\nРусский\n\n([\s\S]+)$/.exec(
-    notes.trim().replace(/\r\n/g, "\n"),
-  );
-  if (!sections || !sections[1].trim() || !sections[2].trim()) return notes;
-  return sections[language === "ru" ? 2 : 1].trim();
+  const normalized = notes.trim().replace(/\r\n/g, "\n");
+  const markdown = normalized.replace(/^# [^\n]+\n+/, "");
+  const sections = markdown.startsWith("## ")
+    ? markdown.split(/^## (English|Русский)[ \t]*$/m)
+    : normalized.split(/^(English|Русский)[ \t]*$/m);
+  if (sections[0].trim() || sections.length < 3 || sections.length > 5) return notes;
+
+  const translations = new Map<string, string>();
+  for (let i = 1; i < sections.length; i += 2) {
+    if (translations.has(sections[i])) return notes;
+    translations.set(sections[i], sections[i + 1].trim());
+  }
+  const selected = language === "ru" ? "Русский" : "English";
+  const fallback = language === "ru" ? "English" : "Русский";
+  return translations.get(selected) || translations.get(fallback) || notes;
 }
 
 const syllables: Record<string, string> = {

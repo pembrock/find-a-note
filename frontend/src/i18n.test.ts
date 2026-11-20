@@ -56,18 +56,32 @@ test("catalogs have matching, populated, referenced keys and interpolation", () 
   }
 });
 
-test("bilingual signed notes select a section and legacy notes display verbatim", () => {
-  const notes =
-    "English\r\n\r\n- English changes\r\n\r\nРусский\r\n\r\n- Изменения";
-  assert.equal(localizedNotes(notes, "en"), "- English changes");
-  assert.equal(localizedNotes(notes, "ru"), "- Изменения");
-  for (const legacy of [
-    "Legacy notes",
-    "Заметки старой версии",
-    "English\n\nPartial",
+test("bilingual release notes select the requested language in both formats", () => {
+  for (const notes of [
+    "English\r\n\r\n- English changes\r\n\r\nРусский\r\n\r\n- Изменения",
+    "# Find a Note 0.4.1\n\n## English\n\n- English changes\n\n## Русский\n\n- Изменения",
+    "## Русский\n\n- Изменения\n\n## English\n\n- English changes",
   ]) {
-    assert.equal(localizedNotes(legacy, "en"), legacy);
+    assert.equal(localizedNotes(notes, "en"), "- English changes");
+    assert.equal(localizedNotes(notes, "ru"), "- Изменения");
   }
+});
+
+test("notes fall back to the available translation or preserve unstructured text", () => {
+  for (const [notes, expected] of [
+    ["## English\n\n- English changes", "- English changes"],
+    ["## English\n\n## Русский\n\n- Изменения", "- Изменения"],
+    ["English\n\n- English changes\n\nРусский", "- English changes"],
+    ["Русский\n\n- Изменения", "- Изменения"],
+    ["Legacy notes", "Legacy notes"],
+    ["Заметки старой версии", "Заметки старой версии"],
+  ]) {
+    assert.equal(localizedNotes(notes, "en"), expected);
+    assert.equal(localizedNotes(notes, "ru"), expected);
+  }
+});
+
+test("solfege preserves accidentals", () => {
   assert.equal(solfege("Db4"), "Re♭");
   assert.equal(solfege("C#4"), "Do♯");
 });

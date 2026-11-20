@@ -183,13 +183,16 @@ def fetch_bundle(api, args, directory):
     return {**expected, "packages": packages, "artifact_id": artifact["id"], "artifact_digest": digest}
 
 
-def check_notes(path):
+def check_notes(path, *, for_manifest=False):
     raw = path.read_bytes()
     notes = raw.decode("utf-8")
     sections = re.split(r"(?m)^## (English|Русский)\s*\r?$", notes)
     if (len(raw) > 4096 or len(sections) != 5 or {sections[1], sections[3]} != {"English", "Русский"}
             or not sections[2].strip() or not sections[4].strip()):
         raise ValueError("release notes require nonempty ## English and ## Русский sections (UTF-8, up to 4096 bytes)")
+    if for_manifest:
+        bodies = {sections[i]: sections[i + 1].strip().replace("\r\n", "\n") for i in (1, 3)}
+        return f"English\n\n{bodies['English']}\n\nРусский\n\n{bodies['Русский']}"
     return notes
 
 
@@ -211,8 +214,10 @@ def manifest_tool(args, directory, metadata, *, sign=False):
     with tempfile.TemporaryDirectory() as temporary:
         index = Path(temporary) / "packages.json"
         index.write_text(json.dumps(metadata["packages"]), encoding="utf-8")
+        notes = Path(temporary) / "manifest-notes.txt"
+        notes.write_bytes(check_notes(directory / NOTES, for_manifest=True).encode("utf-8"))
         command = ["go", "run", "./cmd/update-manifest", "-macos", "-version", args.version,
-                   "-dir", str(directory.resolve()), "-notes", str((directory / NOTES).resolve()),
+                   "-dir", str(directory.resolve()), "-notes", str(notes),
                    "-package-index", str(index)]
         if sign:
             # Avoid including the private-key path in a CalledProcessError.

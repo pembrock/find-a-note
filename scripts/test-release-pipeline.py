@@ -127,6 +127,32 @@ class ReleasePipelineTest(unittest.TestCase):
                 self.assertEqual(open_url.call_args.args[0].get_header("Accept"), accept)
                 self.assertEqual(target.read_bytes(), b"zip")
 
+    def test_manifest_notes_keep_legacy_language_delimiters(self):
+        release.prepare(self.api, self.args)
+        metadata = release.verify_again(self.api, self.args, signed=False)
+        markdown = "# Find a Note\r\n\r\n## Русский\r\n\r\nИзменения.\r\n\r\n## English\r\n\r\nChanges.\r\n"
+        notes = self.directory / release.NOTES
+        notes.write_bytes(markdown.encode("utf-8"))
+
+        def verify_command(command, **kwargs):
+            wire = Path(command[command.index("-notes") + 1]).read_bytes().decode("utf-8")
+            self.assertEqual(wire, "English\n\nChanges.\n\nРусский\n\nИзменения.")
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(release.subprocess, "run", side_effect=verify_command) as run:
+            release.manifest_tool(self.args, self.directory, metadata, sign=True)
+            release.manifest_tool(self.args, self.directory, metadata)
+            self.assertEqual(run.call_count, 2)
+        self.assertEqual(notes.read_bytes(), markdown.encode("utf-8"))
+
+    def test_preparation_requires_both_translations(self):
+        for markdown in ("## English\n\nChanges.", "## English\n\nChanges.\n\n## Русский"):
+            with self.subTest(markdown=markdown):
+                self.notes.write_text(markdown, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "require nonempty"):
+                    release.prepare(self.api, self.args)
+                self.assertFalse(self.directory.exists())
+
     def test_network_failure(self):
         self.api.download.side_effect = URLError("offline")
         with self.assertRaises(URLError):
