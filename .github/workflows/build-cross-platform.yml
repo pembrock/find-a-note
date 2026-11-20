@@ -132,7 +132,7 @@ jobs:
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ${{ matrix.platform }}-${{ github.sha }}
+          name: ${{ matrix.platform }}-${{ github.sha }}-${{ github.run_attempt }}
           path: ci-${{ matrix.platform }}/
           if-no-files-found: error
           overwrite: true
@@ -151,15 +151,17 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Test release preparation and publication with fixtures
+        run: python -B scripts/test-release-pipeline.py
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
-          pattern: '*-${{ github.sha }}'
+          pattern: '*-${{ github.sha }}-${{ github.run_attempt }}'
           path: ci-input
       - name: Verify provenance, package list and SHA-256
         run: python scripts/ci-artifacts.py collect ci-input ci-bundle
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: find-a-note-packages-${{ github.sha }}
+          name: find-a-note-packages-${{ github.sha }}-${{ github.run_attempt }}
           path: ci-bundle/
           if-no-files-found: error
           overwrite: true

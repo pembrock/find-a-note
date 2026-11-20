@@ -68,30 +68,41 @@ def write_bundle(output, metadata, checksums):
     (output / "SHA256SUMS.txt").write_bytes(sums.encode("ascii"))
 
 
-def stage(platform, source, output, commit, version):
+def run_identity():
+    return {
+        "repository": os.environ["GITHUB_REPOSITORY"],
+        "ref": os.environ["GITHUB_REF"],
+        "event": os.environ["GITHUB_EVENT_NAME"],
+        "run_id": int(os.environ["GITHUB_RUN_ID"]),
+        "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+    }
+
+
+def stage(platform, source, output, commit, version, run):
     names = expected_packages(version)[platform]
     checksums = verify_sums(source, names, exact=platform == "windows-amd64")
     output.mkdir()
     for name in names:
         shutil.copyfile(source / name, output / name)
-    metadata = {"commit": commit, "version": version, "platform": platform, "packages": checksums}
+    metadata = {"commit": commit, "version": version, "platform": platform, "run": run, "packages": checksums}
     write_bundle(output, metadata, checksums)
     verify_sums(output, names, exact=True)
 
 
-def collect(source, output, commit, version):
+def collect(source, output, commit, version, run):
     checksums = {}
     packages = expected_packages(version)
-    folders = {f"{platform}-{commit}" for platform in packages}
+    suffix = f"{commit}-{run['run_attempt']}"
+    folders = {f"{platform}-{suffix}" for platform in packages}
     if {path.name for path in source.iterdir()} != folders:
         raise ValueError("expected one Windows and one macOS artifact for the checkout SHA")
     for platform, names in packages.items():
-        directory = source / f"{platform}-{commit}"
+        directory = source / f"{platform}-{suffix}"
         if {path.name for path in directory.iterdir()} != set(names) | {"build-metadata.json", "SHA256SUMS.txt"}:
             raise ValueError(f"unexpected artifact contents: {directory}")
         verified = verify_sums(directory, names, exact=True)
         metadata = json.loads((directory / "build-metadata.json").read_text(encoding="utf-8"))
-        expected = {"commit": commit, "version": version, "platform": platform, "packages": verified}
+        expected = {"commit": commit, "version": version, "platform": platform, "run": run, "packages": verified}
         if metadata != expected:
             raise ValueError(f"build metadata mismatch for {platform}")
         checksums.update(verified)
@@ -99,8 +110,10 @@ def collect(source, output, commit, version):
     output.mkdir()
     for platform, names in packages.items():
         for name in names:
-            shutil.copyfile(source / f"{platform}-{commit}" / name, output / name)
-    write_bundle(output, {"commit": commit, "version": version, "packages": checksums}, checksums)
+            shutil.copyfile(source / f"{platform}-{suffix}" / name, output / name)
+    write_bundle(output, {
+        "commit": commit, "version": version, "run": run, "platforms": packages, "packages": checksums,
+    }, checksums)
     verify_sums(output, checksums, exact=True)
 
 
@@ -116,9 +129,9 @@ def main():
     args = parser.parse_args()
     commit, version = build_identity()
     if args.command == "stage":
-        stage(args.platform, args.source, args.output, commit, version)
+        stage(args.platform, args.source, args.output, commit, version, run_identity())
     else:
-        collect(args.source, args.output, commit, version)
+        collect(args.source, args.output, commit, version, run_identity())
     print(f"Verified {args.output} for {commit} (version {version})")
 
 
