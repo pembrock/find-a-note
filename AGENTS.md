@@ -1,9 +1,9 @@
 # Find a Note
 
-Find a Note is a desktop piano note-reading trainer for Windows 10 and 11 x64
-with Microsoft Edge WebView2 Runtime. It uses Go, Wails v2, React, TypeScript,
-VexFlow, and Tone.js with Web Audio. The source license is GPL-3.0-only.
-macOS is planned.
+Find a Note is a desktop piano note-reading trainer for Windows 10 and 11 amd64
+with Microsoft Edge WebView2 Runtime and macOS Apple Silicon arm64 with
+WKWebView. Both platforms share one Go, Wails v2, React, TypeScript, VexFlow,
+and Tone.js codebase. The source license is GPL-3.0-only.
 
 ## Read the repository first
 
@@ -23,29 +23,33 @@ secret values, access to credentials, or user preferences.
   range and answer rules live in [model.ts](frontend/src/model.ts), and the
   “First Notes” progression lives in [learning.ts](frontend/src/learning.ts).
   [UI-04](docs/UI-04.md) documents the settings sections.
-- [internal/midi](internal/midi) contains the MIDI manager and WinMM driver.
+- [internal/midi](internal/midi) contains the shared MIDI manager and the WinMM and CoreMIDI drivers.
   [useMidi.ts](frontend/src/useMidi.ts) connects the frontend to Wails MIDI
   events. Calibration lives in [calibration.ts](frontend/src/calibration.ts),
   [useCalibration.ts](frontend/src/useCalibration.ts), and
   [CalibrationWizard.tsx](frontend/src/CalibrationWizard.tsx). See
-  [MIDI-01](docs/MIDI-01.md) and [MIDI-02](docs/MIDI-02.md). CoreMIDI is the
-  planned macOS backend. Windows tasks do not require implementing it.
+  [MIDI-01](docs/MIDI-01.md) and [MIDI-02](docs/MIDI-02.md), and see [MAC-02](docs/macos/MAC-02-COREMIDI.md)
+  for CoreMIDI.
 - [audio.ts](frontend/src/audio.ts) and [useAudio.tsx](frontend/src/useAudio.tsx)
   handle playback and source preferences with bundled piano samples. See
   [AUDIO-01](docs/AUDIO-01.md) and [UPDATE-03](docs/UPDATE-03.md) for the
   current per-device sound default and compatibility with saved choices.
 - User settings and per-device range profiles use versioned `sonari.*` keys in
-  WebView2 local storage. Preserve the existing WebView2 profile and origin,
-  settings compatibility, and MIDI calibration profiles across builds and updates.
+  WebView2 and WKWebView local storage. Preserve each platform's profile and Wails
+  origin, saved settings compatibility, and per-device MIDI calibration across
+  builds and updates.
 - [internal/update](internal/update) contains the GitHub provider, manifest
-  verification, update service, and Windows helper. React presents update
+  verification, update service, and platform-specific Windows and macOS helpers. React presents update
   status and actions in [updates.tsx](frontend/src/updates.tsx). See
   [UPDATE-01](docs/UPDATE-01.md) for the update protocol and signing,
-  and [UPDATE-04](docs/UPDATE-04.md) for the current update dialog and scheduling.
+  [UPDATE-04](docs/UPDATE-04.md) for the update dialog and scheduling, and
+  [MAC-06B](docs/macos/MAC-06B-AUTO-UPDATER.md) for the macOS transaction.
 - [scripts/build-release.ps1](scripts/build-release.ps1) packages Windows builds
   and calls [scripts/write-third-party-notices.ps1](scripts/write-third-party-notices.ps1).
   Wails packaging resources and the NSIS installer project live in
-  [build/windows](build/windows). See [RELEASE-01](docs/RELEASE-01.md) for
+  [build/windows](build/windows). [scripts/build-macos.sh](scripts/build-macos.sh)
+  builds and verifies the Apple Silicon app and DMG. See
+  [MAC-04A](docs/macos/MAC-04A-DMG-DESIGN.md) for DMG packaging, [RELEASE-01](docs/RELEASE-01.md) for
   Windows packaging and [UPDATE-01](docs/UPDATE-01.md) for signed releases.
 
 ## Development and Git
@@ -54,22 +58,29 @@ secret values, access to credentials, or user preferences.
   interface minimal, and avoid unrelated refactoring and unjustified major
   dependency upgrades.
 - Change training algorithms, the MIDI backend, or the audio engine only when
-  explicitly requested. Keep Windows working and consider future macOS
-  compatibility when touching platform boundaries.
+  explicitly requested. Keep shared behavior platform-independent where possible.
+  Isolate OS-specific behavior behind existing interfaces and Go platform
+  filenames or build constraints. Verify that changes to one platform preserve
+  the other platform's behavior.
 - Run `git status --short --branch` before starting work. Start new feature
-  branches from current public `main` and use a Git worktree when isolation helps.
+  branches from current public `main`. Use one feature branch across both
+  machines, with [worktrees for isolation](docs/development/CROSS-PLATFORM-WORKFLOW.md)
+  when helpful. Keep platform fixes in reviewable commits within that branch.
 - Preserve user changes and review staged content before committing. Keep local
   files out of commits until reviewed. Modify, delete, or publish the user’s
   `promo/` directory only on explicit request.
-- Preserve public history and avoid destructive Git operations. A force push
-  requires explicit permission.
+- Require explicit owner authorization for push, merge, tag creation, release
+  publication, and production-key changes. Preserve public history. Destructive
+  Git operations, including force push, require explicit authorization.
 
 ## Verification
 
-Run the standard application checks on Windows for application changes. Use the
-tooling prerequisites in [README.md](README.md). Playwright uses Microsoft Edge
-and starts a local Vite server. Build the frontend before running Go checks so
-that the embedded assets exist.
+For application changes, run frontend build, frontend unit tests, Go tests,
+`go vet`, and the platform checks relevant to the change. Build the frontend
+before Go checks to supply the embedded assets. Follow [README.md](README.md)
+for prerequisites and the [development workflow](docs/development/CROSS-PLATFORM-WORKFLOW.md)
+for the macOS commands and handoff. The Windows baseline uses Microsoft Edge
+for Playwright and starts a local Vite server.
 
 ```powershell
 Push-Location frontend
@@ -83,7 +94,15 @@ go vet ./...
 wails build -platform windows/amd64
 ```
 
-For release tasks, also build both the per-user NSIS Installer and Portable EXE.
+Changes affecting both platforms require a successful [Cross-platform build](docs/ci/CI-01-CROSS-PLATFORM-BUILD.md)
+run for the change, including Windows, macOS, and the archive job. Record any
+check awaiting authorized publication or access to the second machine.
+CI complements native acceptance for changes to MIDI, audio, system windows,
+installation, or updates. Exercise the affected scenario on each affected OS and
+use isolated profiles and install locations for installation and update tests.
+
+For release tasks, also build both the per-user NSIS Installer and Portable EXE
+and the Apple Silicon DMG when the release includes macOS.
 Verify the version in Windows executable metadata and the About screen, check
 SHA-256 sums, confirm license and attribution notices are bundled, and verify the
 update manifest signature and the package sizes and hashes against the manifest.
@@ -140,6 +159,7 @@ script’s generated third-party notices. Do not change third-party licenses.
 ## Working with the user
 
 Briefly share the plan before edits and report meaningful progress. Surface
-errors and skipped checks. In the final report, give artifact paths, branch,
-HEAD, and Git status. List limitations separately. Stay within the user’s
-explicit authorization for publication.
+errors and skipped checks. Report the overall result as **PASS**, **FAIL**, or
+**BLOCKED**. Include test results, changed files, artifact paths when applicable,
+branch, HEAD, and Git status. List limitations and provide commands and scenarios
+for any checks still needed on the second platform.

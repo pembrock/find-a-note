@@ -72,13 +72,9 @@ shasum -a 256 -c SHA256SUMS.txt
 
 ## Запуск из интерфейса GitHub
 
-Когда workflow появится в ветке по умолчанию, владелец с правом записи
-открывает **Actions → Cross-platform build → Run workflow**, выбирает
-ветку и нажимает **Run workflow**. После завершения открывает нужный запуск
-и скачивает `find-a-note-packages-<SHA>` из раздела **Artifacts**.
-До появления workflow в ветке по умолчанию первый hosted-прогон можно
-получить событием pull request после отдельного разрешения на публикацию
-ветки. [Ручной запуск workflow](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
+Владелец с правом записи может открыть **Actions → Cross-platform build → Run
+workflow**, выбрать ветку и запустить сборку. После завершения итоговый ZIP
+доступен в разделе **Artifacts**. [Ручной запуск workflow](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
 
 ## Подготовка релиза и ограничения
 
@@ -100,10 +96,21 @@ Headless Playwright покрывает веб-интерфейс. Реальны
 desktop, действия Gatekeeper, физический MIDI и установка на обычной
 пользовательской машине требуют отдельного запуска. Режим
 `/UPDATESTAGE` проверяет payload установщика, но не заменяет приёмку
-обычной установки и отката. GitHub Actions и нативный Windows-раннер
-**NOT TESTED** до первого разрешённого прогона.
+обычной установки и отката.
 
-## Локальная проверка CI-01
+## Проверка на GitHub Actions
+
+[Прогон на main](https://github.com/pembrock/find-a-note/actions/runs/44797065930)
+по событию `push` завершился успешно. Все три задания использовали
+`8a96fd5d313fccc1fbf3c694807bc983a25a9fc4`.
+
+| Задание | Результат |
+| --- | --- |
+| Windows amd64 | **PASS**. Setup и Portable проверены, 69 тестов Edge прошли. |
+| macOS arm64 | **PASS**. DMG проверен, по 69 тестов Chromium и WebKit прошли. |
+| Итоговый архив | **PASS**. Пакеты, SHA-256 и метаданные проверены, ZIP загружен в Actions. |
+
+## Историческая локальная проверка до hosted-прогона
 
 На Apple Silicon прошли `actionlint`, разбор PowerShell-сценариев,
 production-сборка .app и DMG, 13 frontend unit-тестов, 64 теста Chromium,
@@ -111,4 +118,4 @@ production-сборка .app и DMG, 13 frontend unit-тестов, 64 тест�
 подпись и оформление образа. Проверка сводного архива выполнена с
 реальным DMG и условными Windows-файлами. Она отклонила повреждённый
 пакет, отсутствующий пакет и несовпадающий SHA. Go-кросс-компиляция дала
-PE32+ amd64. Настоящие Windows Setup, Portable и Edge требуют CI-раннера.
+PE32+ amd64. Setup, Portable и Edge проверены в hosted-прогоне выше.
