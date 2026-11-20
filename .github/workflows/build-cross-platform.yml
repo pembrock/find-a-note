@@ -1,0 +1,161 @@
+name: Cross-platform build
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.26.11'
+  GOTOOLCHAIN: local
+  NODE_VERSION: '24.2.0'
+  PYTHON_VERSION: '3.12.12'
+  WAILS_VERSION: 'v2.17.0'
+  NSIS_VERSION: '3.12.0'
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-amd64
+            runner: windows-latest
+            arch: X64
+          - platform: macos-arm64
+            runner: macos-15
+            arch: ARM64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify checkout and runner architecture
+        shell: bash
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$RUNNER_ARCH" = "$EXPECTED_ARCH"
+          case "$RUNNER_OS" in
+            Windows) test "$(uname -m)" = x86_64 ;;
+            macOS) test "$(uname -m)" = arm64 ;;
+            *) exit 1 ;;
+          esac
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Wails CLI
+        shell: bash
+        run: |
+          test "$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)" = "$WAILS_VERSION"
+          go install "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION"
+          bin="$(go env GOPATH)/bin"
+          if [[ "$RUNNER_OS" == Windows ]]; then bin="$(cygpath -w "$bin")"; fi
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nsis --version=$env:NSIS_VERSION --allow-downgrade --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS installation failed.' }
+          $nsis = @(
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+            "$env:ProgramFiles\NSIS\makensis.exe"
+          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (!$nsis) { throw 'makensis.exe was not installed.' }
+          $version = (& $nsis /VERSION | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $version -cne ('v' + ($env:NSIS_VERSION -replace '\.0$',''))) {
+            throw "Unexpected NSIS version: $version"
+          }
+          Split-Path -Parent $nsis | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build and verify Windows packages
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/build-release.ps1 -RunChecks
+          $version = (Get-Content -Raw wails.json | ConvertFrom-Json).info.productVersion
+          $packages = "artifacts/windows-$version"
+          ./scripts/verify-ci-windows.ps1 -PackageDirectory $packages
+          python scripts/ci-artifacts.py stage windows-amd64 $packages ci-windows-amd64
+          if ($LASTEXITCODE -ne 0) { throw 'Windows artifact verification failed.' }
+
+      - name: Build and verify macOS packages
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/dmg-venv"
+          "$RUNNER_TEMP/dmg-venv/bin/python" -m pip install -r build/darwin/dmg/requirements.txt
+          DMGBUILD_PYTHON="$RUNNER_TEMP/dmg-venv/bin/python" bash scripts/build-macos.sh artifacts/ci-macos
+          python scripts/ci-artifacts.py stage macos-arm64 artifacts/ci-macos ci-macos-arm64
+
+      - name: Playwright on Microsoft Edge
+        if: runner.os == 'Windows'
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          npm.cmd run test:ui
+
+      - name: Playwright on Chromium and WebKit
+        if: runner.os == 'macOS'
+        working-directory: frontend
+        shell: bash
+        run: |
+          npx --no-install playwright install chromium webkit
+          PLAYWRIGHT_BROWSER=chromium npm run test:ui
+          PLAYWRIGHT_BROWSER=webkit npm run test:ui
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ${{ matrix.platform }}-${{ github.sha }}
+          path: ci-${{ matrix.platform }}/
+          if-no-files-found: error
+          overwrite: true
+          compression-level: 0
+
+  verify-artifacts:
+    name: Verify all packages and upload bundle
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          pattern: '*-${{ github.sha }}'
+          path: ci-input
+      - name: Verify provenance, package list and SHA-256
+        run: python scripts/ci-artifacts.py collect ci-input ci-bundle
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: find-a-note-packages-${{ github.sha }}
+          path: ci-bundle/
+          if-no-files-found: error
+          overwrite: true
+          compression-level: 0
