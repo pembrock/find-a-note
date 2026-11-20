@@ -281,33 +281,44 @@ test("responsive layout and musical SVGs in both clefs and extreme registers", a
       expect(await svg.locator("path").count()).toBeGreaterThan(2);
       await expect(svg).toHaveAttribute("data-written-midi", String(midi));
       await expect(svg.locator(".vf-annotation")).toHaveCount(0);
-      expect(
-        await svg.evaluate((el) => {
-          const b = (el as SVGGraphicsElement).getBBox(),
-            v = (el as SVGSVGElement).viewBox.baseVal;
-          return b.y < v.y || b.y + b.height > v.y + v.height;
-        }),
-      ).toBeFalsy();
+      // A resize redraw can replace the SVG between locator resolution and
+      // evaluation. Find and measure the current SVG in one browser callback.
+      const bounds = await page.locator(".staff").evaluate((staff) => {
+        const score = staff.querySelector("svg")!;
+        const box = score.getBBox();
+        const viewBox = score.viewBox.baseVal;
+        return {
+          height: box.height,
+          top: box.y,
+          bottom: box.y + box.height,
+          viewTop: viewBox.y,
+          viewBottom: viewBox.y + viewBox.height,
+        };
+      });
+      const context = `clef=${clef}, octave=${oct}, MIDI=${midi}`;
+      expect(bounds.height, context).toBeGreaterThan(0);
+      expect(bounds.top, context).toBeGreaterThanOrEqual(bounds.viewTop);
+      expect(bounds.bottom, context).toBeLessThanOrEqual(bounds.viewBottom);
     }
 });
 
-test("D5 in bass and A0/C8 in forced clefs never transpose or clip", async ({
-  page,
-}) => {
-  await page.addInitScript(() => {
-    Math.random = () => 0.2;
-  });
-  await page.goto("/");
-  for (const viewport of [
-    { width: 900, height: 600 },
-    { width: 760, height: 560 },
+for (const viewport of [
+  { width: 900, height: 600 },
+  { width: 760, height: 560 },
+]) {
+  for (const [oct, expected] of [
+    [5, 74],
+    [0, 21],
+    [8, 108],
   ]) {
-    await page.setViewportSize(viewport);
-    for (const [oct, expected] of [
-      [5, 74],
-      [0, 21],
-      [8, 108],
-    ])
+    test(`MIDI ${expected} never transposes or clips at ${viewport.width}×${viewport.height}`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        Math.random = () => 0.2;
+      });
+      await page.setViewportSize(viewport);
+      await page.goto("/");
       for (const clef of ["bass", "treble", "auto"])
         for (const spelling of ["sharp", "flat"]) {
           await page.evaluate(
@@ -335,27 +346,42 @@ test("D5 in bass and A0/C8 in forced clefs never transpose or clip", async ({
           await expect(page.locator("main")).not.toContainText(
             /8va|8vb|15ma|15mb/,
           );
-          const geometry = await svg.evaluate((el) => {
-            const b = (el as SVGGraphicsElement).getBBox(),
-              v = (el as SVGSVGElement).viewBox.baseVal;
+          const geometry = await page.locator(".staff").evaluate((staff) => {
+            const score = staff.querySelector("svg")!;
+            const box = score.getBBox();
+            const viewBox = score.viewBox.baseVal;
             return {
-              inside:
-                b.x >= v.x &&
-                b.y >= v.y &&
-                b.x + b.width <= v.x + v.width &&
-                b.y + b.height <= v.y + v.height,
-              paths: el.querySelectorAll("path").length,
+              box: { x: box.x, y: box.y, width: box.width, height: box.height },
+              viewBox: {
+                x: viewBox.x,
+                y: viewBox.y,
+                width: viewBox.width,
+                height: viewBox.height,
+              },
+              paths: score.querySelectorAll("path").length,
             };
           });
-          expect(geometry.inside).toBeTruthy();
-          expect(geometry.paths).toBeGreaterThan(2);
+          const { box, viewBox, paths } = geometry;
+          const context = `clef=${clef}, spelling=${spelling}, MIDI=${expected}, viewport=${viewport.width}×${viewport.height}`;
+          expect(box.width, context).toBeGreaterThan(0);
+          expect(box.height, context).toBeGreaterThan(0);
+          expect(box.x, context).toBeGreaterThanOrEqual(viewBox.x);
+          expect(box.y, context).toBeGreaterThanOrEqual(viewBox.y);
+          expect(box.x + box.width, context).toBeLessThanOrEqual(
+            viewBox.x + viewBox.width,
+          );
+          expect(box.y + box.height, context).toBeLessThanOrEqual(
+            viewBox.y + viewBox.height,
+          );
+          expect(paths, context).toBeGreaterThan(2);
           await page.locator(".note-names").scrollIntoViewIfNeeded();
           const names = await page.locator(".note-names").boundingBox(),
             piano = await page.locator(".piano-panel").boundingBox();
           expect(names!.y + names!.height).toBeLessThanOrEqual(piano!.y + 1);
         }
+    });
   }
-});
+}
 
 test("hidden names reveal only on success, remain locked for 1200ms and reset", async ({
   page,
@@ -363,7 +389,9 @@ test("hidden names reveal only on success, remain locked for 1200ms and reset", 
   await page.addInitScript(() => {
     Math.random = () => 0.27;
   });
+  await page.clock.install();
   await page.goto("/");
+  await page.clock.pauseAt(Date.now() + 1000);
   for (const spelling of ["sharp", "flat"] as const)
     for (const [letter, russian] of [
       [false, false],
@@ -412,13 +440,16 @@ test("hidden names reveal only on success, remain locked for 1200ms and reset", 
         "1",
       );
       if (!letter || !russian) {
-        await page.waitForTimeout(750);
+        await page.clock.runFor(1199);
         await expect(page.locator(".staff svg")).toHaveAttribute(
           "data-midi",
           "63",
         );
         await page.locator('.white-key[data-midi="60"]').click();
         await expect(page.locator(".errors")).toHaveText("Ошибки: 1");
+        await page.clock.runFor(1);
+      } else {
+        await page.clock.runFor(650);
       }
       await expect(page.locator(".staff svg")).not.toHaveAttribute(
         "data-midi",

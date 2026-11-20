@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$SigningKey,
-    [string]$UpdateNotes
+    [string]$UpdateNotes,
+    [switch]$RunChecks
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,7 +37,12 @@ try {
     try {
         Invoke-Checked npm.cmd @('ci')
         Invoke-Checked npm.cmd @('run', 'build')
+        if ($RunChecks) { Invoke-Checked npm.cmd @('test') }
     } finally { Pop-Location }
+    if ($RunChecks) {
+        Invoke-Checked go @('test', './...')
+        Invoke-Checked go @('vet', './...')
+    }
     & "$PSScriptRoot/write-third-party-notices.ps1"
 
     $setupSource = Join-Path 'build/bin' $setup

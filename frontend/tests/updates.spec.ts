@@ -12,10 +12,11 @@ async function launch(
     notes = "Улучшено окно обновления.",
     total = 12 * 1024 ** 2,
     manual = false,
+    macOS = false,
   } = {},
 ) {
   await page.addInitScript(
-    ({ phase, result, notice, notes, total, manual }) => {
+    ({ phase, result, notice, notes, total, manual, macOS }) => {
       const offer = {
         version: "0.4.1",
         notes,
@@ -24,6 +25,7 @@ async function launch(
         total: 0,
         problem: "",
         manual,
+        macOS,
       };
       const statusFor = (phase: string) => ({
         ...offer,
@@ -94,7 +96,7 @@ async function launch(
         },
       });
     },
-    { phase, result, notice, notes, total, manual },
+    { phase, result, notice, notes, total, manual, macOS },
   );
   await page.goto("/");
 }
@@ -354,12 +356,29 @@ test("manual macOS update verifies the DMG before opening GitHub and offers no i
   await expect(dialog.getByRole("progressbar")).toBeVisible();
   await page.evaluate(() => (window as any).updateTest.done("ready"));
   await expect(dialog.getByText("a".repeat(64))).toBeVisible();
+  await expect(dialog.getByText(/Всё равно открыть/)).toBeVisible();
   await dialog.getByRole("combobox", { name: "Язык приложения" }).selectOption("en");
   await expect(dialog.getByRole("region")).toHaveText("- English notes");
+  await expect(dialog.getByText(/Open Anyway/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: /restart|install/i })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Open GitHub release" }).click();
   expect(await page.evaluate(() => (window as any).updateTest.url)).toBe(
     "https://github.com/pembrock/find-a-note/releases/tag/v0.4.1",
   );
   expect(await page.evaluate(() => (window as any).updateTest.installs)).toBe(0);
+});
+
+
+test("automatic macOS update explains Gatekeeper before preparing the restart", async ({ page }) => {
+  await launch(page, { phase: "ready", macOS: true });
+  await badgeFor(page).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Перезапустить", exact: true }).click();
+  await expect(dialog.getByText(/Конфиденциальность и безопасность/)).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Язык приложения" }).selectOption("en");
+  await expect(dialog.getByText(/Open Anyway in System Settings/)).toBeVisible();
+  expect(await page.evaluate(() => (window as any).updateTest.installs)).toBe(0);
+  await dialog.getByRole("button", { name: "Confirm restart" }).click();
+  await expect(dialog.getByText(/Verifying and preparing/)).toBeVisible();
+  expect(await page.evaluate(() => (window as any).updateTest.installs)).toBe(1);
 });

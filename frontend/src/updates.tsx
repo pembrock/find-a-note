@@ -19,6 +19,7 @@ type Status = {
   total: number;
   problem: string;
   manual?: boolean;
+  macOS?: boolean;
   verifiedSHA256?: string;
 };
 type Action = "Check" | "Download" | "Install";
@@ -61,6 +62,7 @@ function sameStatus(a: Status, b: Status) {
     a.total === b.total &&
     a.problem === b.problem &&
     a.manual === b.manual &&
+    a.macOS === b.macOS &&
     a.verifiedSHA256 === b.verifiedSHA256
   );
 }
@@ -210,6 +212,7 @@ const problems: Partial<Record<string, MessageKey>> = {
   integrity: "update-integrity-error",
   download: "update-download-error",
   prepare: "update-prepare-error",
+  pending: "update-macos-pending",
 };
 
 export function UpdateDialog({
@@ -308,6 +311,7 @@ export function UpdateDialog({
             </>
           )}
           {phase === "unavailable" && <p>{t("update-package-unavailable")}</p>}
+          {status.macOS && status.manual && phase === "available" && <p>{t("update-macos-manual-location")}</p>}
           {phase === "downloading" && (
             <>
               <progress
@@ -333,16 +337,18 @@ export function UpdateDialog({
           {manualReady && (
             <>
               <p>{t("update-manual-explainer")}</p>
+              <p className="update-muted">{t("update-macos-gatekeeper")}</p>
               <p className="update-muted">
                 SHA-256{" "}
                 <code className="update-digest">{status.verifiedSHA256}</code>
               </p>
             </>
           )}
+          {status.macOS && phase === "installing" && <p>{t("update-macos-preparing")}</p>}
           {phase === "ready" && !status.manual && (
             <p>
               {confirm
-                ? t("update-restart-confirmation")
+                ? t(status.macOS ? "update-macos-confirm" : "update-restart-confirmation")
                 : t("update-ready-explainer")}
             </p>
           )}

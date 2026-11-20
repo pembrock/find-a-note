@@ -25,6 +25,7 @@ func TestMacOSUpdateChannel(t *testing.T) {
 		{"bad hash", "download-error", "integrity"},
 		{"truncated stream", "download-error", "integrity"},
 		{"corrupt signed manifest", "check-error", "manifest"},
+		{"invalid signature", "check-error", "manifest"},
 		{"API unavailable", "check-error", "feed"},
 		{"offline", "check-error", "feed"},
 		{"bad version", "check-error", "feed"},
@@ -61,6 +62,9 @@ func TestMacOSUpdateChannel(t *testing.T) {
 				current = "0.4.1"
 			}
 			key := signFixture(t, m, files, edit)
+			if scenario.name == "invalid signature" {
+				files[SignatureName][0] ^= 1
+			}
 			g, server := localGitHub(t, tag, files, apiStatus)
 			if scenario.name == "offline" {
 				server.Close()
@@ -93,7 +97,7 @@ func TestMacOSUpdateChannel(t *testing.T) {
 	}
 }
 
-func TestNativeMacLauncher(t *testing.T) {
+func TestNativeMacLauncherRejectsInvalidJob(t *testing.T) {
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
 		t.Skip("requires Apple Silicon")
 	}
@@ -101,6 +105,6 @@ func TestNativeMacLauncher(t *testing.T) {
 	l := NewNativeLauncher(version(t, "0.3.0"), PublicKey())
 	p, ok := l.Select(m)
 	if !l.Supported() || !ok || p != m.Packages[1] || l.Start(Job{Package: p}) == nil {
-		t.Fatal("native launcher must select a DMG and decline installation")
+		t.Fatal("native launcher must select a DMG and reject a job without a verified package")
 	}
 }
