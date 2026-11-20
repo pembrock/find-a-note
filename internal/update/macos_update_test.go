@@ -56,9 +56,9 @@ func TestMacOSUpdateChannel(t *testing.T) {
 			case "API unavailable":
 				apiStatus = http.StatusServiceUnavailable
 			case "bad version":
-				tag = "v0.3.1-rc.1"
+				tag = "v0.4.0-rc.1"
 			case "downgrade":
-				current = "0.4.0"
+				current = "0.4.1"
 			}
 			key := signFixture(t, m, files, edit)
 			g, server := localGitHub(t, tag, files, apiStatus)

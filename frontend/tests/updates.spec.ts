@@ -17,7 +17,7 @@ async function launch(
   await page.addInitScript(
     ({ phase, result, notice, notes, total, manual }) => {
       const offer = {
-        version: "0.3.1",
+        version: "0.4.1",
         notes,
         progress: 0,
         received: 0,
@@ -138,7 +138,7 @@ test("background offer, keyboard navigation and focus restoration", async ({
   await expect(
     dialog.getByRole("heading", { name: "Доступно обновление" }),
   ).toBeFocused();
-  await expect(dialog.getByText("Find a Note 0.3.1")).toBeVisible();
+  await expect(dialog.getByText("Find a Note 0.4.1")).toBeVisible();
   await expect(dialog.getByText(`Установлена версия ${config.info.productVersion}`)).toBeVisible();
   await expect(page.getByText("О программе", { exact: true })).toHaveCount(0);
   await page.keyboard.press(tab);
@@ -359,7 +359,7 @@ test("manual macOS update verifies the DMG before opening GitHub and offers no i
   await expect(dialog.getByRole("button", { name: /restart|install/i })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Open GitHub release" }).click();
   expect(await page.evaluate(() => (window as any).updateTest.url)).toBe(
-    "https://github.com/pembrock/find-a-note/releases/tag/v0.3.1",
+    "https://github.com/pembrock/find-a-note/releases/tag/v0.4.1",
   );
   expect(await page.evaluate(() => (window as any).updateTest.installs)).toBe(0);
 });

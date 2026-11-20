@@ -1,19 +1,29 @@
 # Find a Note
 
-Find a Note is a desktop sight-reading trainer. See a note on the staff and play it on a physical MIDI keyboard or the on-screen piano. Once Microsoft Edge WebView2 Runtime is installed, practice and piano playback work offline.
+Find a Note is a desktop sight-reading trainer. See a note on the staff and play it on a physical MIDI keyboard or the on-screen piano. Practice and piano playback work offline after installation.
 
 ![Find a Note showing an exercise, the virtual piano, and the About section](screenshots/release-01-about.jpg)
 
 ## Features
 
 - Start with five treble-clef notes and expand to seven, or create a custom exercise with your own range, clef, accidentals, and answer rules.
-- Practice with the on-screen keyboard or a Windows MIDI keyboard via WinMM. The app supports device selection, automatic reconnection, and per-device range calibration. Yamaha P-45 and SE25 were used in earlier hardware checks.
+- Practice with the on-screen keyboard or a physical MIDI keyboard via WinMM on Windows or CoreMIDI on macOS. The app supports device selection, automatic reconnection, and per-device range calibration. Yamaha P-45 and SE25 were used in earlier hardware checks.
+- Switch between English and Russian in the app.
 - Play bundled Salamander Grand Piano samples with adjustable volume and per-input sound controls.
-- Save exercise, display, audio, and MIDI preferences locally in the app’s WebView2 profile.
+- Save exercise, display, audio, and MIDI preferences locally in the app’s WebView2 profile on Windows or WKWebView profile on macOS.
 
-## Platform and stack
+## Download and install
 
-The current target is **Windows 10 or 11, x64**, with Microsoft Edge WebView2 Runtime. A local Apple Silicon macOS build is available for the virtual piano and training; CoreMIDI and macOS distribution are not yet implemented. See the [MAC-01 validation report](docs/macos/MAC-01-APP.md). The app uses Go and Wails v2 for the desktop shell, React and TypeScript for the interface, VexFlow for notation, Tone.js and Web Audio for playback, and WinMM for native MIDI input.
+Get the package for your platform from the [official releases](https://github.com/pembrock/find-a-note/releases). Match the SHA-256 of your download against the release’s `SHA256SUMS.txt`. [Инструкция по установке на русском](docs/INSTALL-RU.md)
+
+- **Windows 10 and 11 x64.** Run the Setup EXE for a per-user installation, or run the Portable EXE directly. Microsoft Edge WebView2 Runtime is required. When missing, the app or installer can prompt for its installation, which needs an internet connection.
+- **macOS Apple Silicon.** The first Mac build is 0.4.0. Open the arm64 DMG, drag **Find a Note** onto **Applications**, eject the image, and open the installed app. Testing covered macOS 27.2.1 on Apple Silicon.
+
+The Mac app uses an ad hoc signature. macOS may block a downloaded copy at first launch. If you trust the source and have verified its SHA-256, try opening the app, then check **System Settings → Privacy & Security → Open Anyway**. The option depends on your Mac’s security policy. [Apple’s guide to opening apps safely](https://support.apple.com/en-us/102445)
+
+## Updates
+
+Use **Settings → About → Check for updates**. Windows can download and verify the matching Installer or Portable package and apply it after confirmation. On macOS, verify the available DMG in the update dialog, open the official release, download the arm64 DMG in your browser, and compare its SHA-256 with the value shown in the dialog. Quit Find a Note before replacing it in Applications. [Update channel details](docs/macos/MAC-05-UPDATE-CHANNEL.md)
 
 ## Build from source
 
@@ -55,15 +65,7 @@ wails dev
 CGO_ENABLED=1 wails build -platform darwin/arm64
 ```
 
-Open `build/bin/find-a-note.app` in Finder. The stable bundle identifier is
-`io.github.pembrock.findanote`; both bundle versions follow `wails.json`.
-The local bundle uses ad hoc signing. It is not a distributed or notarized release.
-Only macOS 27.2.1 has been exercised; the 11.0 deployment target is not a tested
-minimum. macOS MIDI input uses CoreMIDI.
-
-For an arm64 installation image with bundled license notices, see the
-[macOS packaging guide](docs/macos/MAC-04-DISTRIBUTION.md) and the
-[installation instructions](docs/macos/MAC-04-INSTALL.md).
+Open `build/bin/find-a-note.app` in Finder. Both bundle versions follow `wails.json`. For reproducible arm64 DMG packaging with license notices, use the [macOS packaging guide](docs/macos/MAC-04A-DMG-DESIGN.md).
 
 ## License and attribution
 
@@ -72,4 +74,4 @@ Copyright (C) 2026 Kirill Pasikuta
 The Find a Note project source is licensed under the GNU General Public License, version 3 only (`GPL-3.0-only`). See [LICENSE](LICENSE). Third-party components retain their own licenses.
 
 - Salamander Grand Piano samples by Alexander Holm are licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). See the [sample attribution](frontend/public/audio/salamander/ATTRIBUTION.txt) and [license](frontend/public/audio/salamander/LICENSE.txt).
-- Tone.js is distributed under the [MIT License](frontend/public/audio/TONE-LICENSE.md). The Windows packaging script embeds the license notices collected from the bundled Go and frontend dependencies.
+- Tone.js is distributed under the [MIT License](frontend/public/audio/TONE-LICENSE.md). The Windows and macOS packaging scripts bundle notices for the Go and frontend dependencies.
