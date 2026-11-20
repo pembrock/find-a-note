@@ -14,16 +14,18 @@ Find a Note is a desktop sight-reading trainer. See a note on the staff and play
 
 ## Download and install
 
-Get the package for your platform from the [official releases](https://github.com/pembrock/find-a-note/releases). Match the SHA-256 of your download against the release’s `SHA256SUMS.txt`. [Инструкция по установке на русском](docs/INSTALL-RU.md)
+Get the package for your platform from the [official releases](https://github.com/pembrock/find-a-note/releases). Match the SHA-256 of your download against the release’s `SHA256SUMS.txt`. [Installation guide in English](docs/INSTALL-EN.md) · [Инструкция по установке на русском](docs/INSTALL-RU.md)
 
 - **Windows 10 and 11 x64.** Run the Setup EXE for a per-user installation, or run the Portable EXE directly. Microsoft Edge WebView2 Runtime is required. When missing, the app or installer can prompt for its installation, which needs an internet connection.
-- **macOS Apple Silicon.** The first Mac build is 0.4.0. Open the arm64 DMG, drag **Find a Note** onto **Applications**, eject the image, and open the installed app. Testing covered macOS 27.2.1 on Apple Silicon.
+- **macOS Apple Silicon.** Open the arm64 DMG, drag **Find a Note** onto **Applications**, eject the image, and open the installed app. Testing covered macOS 27.2.1 on Apple Silicon.
 
 The Mac app uses an ad hoc signature. macOS may block a downloaded copy at first launch. If you trust the source and have verified its SHA-256, try opening the app, then check **System Settings → Privacy & Security → Open Anyway**. The option depends on your Mac’s security policy. [Apple’s guide to opening apps safely](https://support.apple.com/en-us/102445)
 
 ## Updates
 
-Use **Settings → About → Check for updates**. Windows can download and verify the matching Installer or Portable package and apply it after confirmation. On macOS, verify the available DMG in the update dialog, open the official release, download the arm64 DMG in your browser, and compare its SHA-256 with the value shown in the dialog. Quit Find a Note before replacing it in Applications. [Update channel details](docs/macos/MAC-05-UPDATE-CHANNEL.md)
+Use **Settings → About → Check for updates**. Windows downloads and verifies the matching Installer or Portable package and applies it after confirmation.
+
+On macOS, install 0.4.1 manually from the arm64 DMG if you are using 0.4.0. From 0.4.1 onward, the app can download and verify later updates and, when installed in a supported writable location, apply them after you confirm installation and restart. Gatekeeper may require **Open Anyway** for the new copy. See the installation guide for the manual DMG option and recovery. [macOS updater details](docs/macos/MAC-06B-AUTO-UPDATER.md)
 
 ## Build from source
 
