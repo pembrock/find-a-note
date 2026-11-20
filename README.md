@@ -59,7 +59,11 @@ Open `build/bin/find-a-note.app` in Finder. The stable bundle identifier is
 `io.github.pembrock.findanote`; both bundle versions follow `wails.json`.
 The local bundle uses ad hoc signing. It is not a distributed or notarized release.
 Only macOS 27.2.1 has been exercised; the 11.0 deployment target is not a tested
-minimum. MIDI input and automatic updates remain unavailable on macOS.
+minimum. macOS MIDI input uses CoreMIDI.
+
+For an arm64 installation image with bundled license notices, see the
+[macOS packaging guide](docs/macos/MAC-04-DISTRIBUTION.md) and the
+[installation instructions](docs/macos/MAC-04-INSTALL.md).
 
 ## License and attribution
 
