@@ -8,6 +8,6 @@
  "frontend:dev:serverUrl": "auto",
  "info": {
   "productName": "Find a Note",
-  "productVersion": "0.4.0"
+  "productVersion": "0.4.1"
  }
 }
