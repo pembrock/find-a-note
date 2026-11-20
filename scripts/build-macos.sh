@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 root=$PWD
-out="${1:-$root/artifacts/mac-04}"
+out="${1:-$root/artifacts/mac-04a}"
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 log="$out/build.log"
@@ -17,6 +17,12 @@ export CGO_CXXFLAGS="$CGO_CFLAGS"
 export CGO_LDFLAGS="-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET -framework UniformTypeIdentifiers"
 export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.26.11}
 wails=${WAILS:-$(go env GOPATH)/bin/wails}
+dmg_python=${DMGBUILD_PYTHON:-python3}
+dmg_layout="$root/build/darwin/dmg"
+if ! "$dmg_python" -m dmgbuild --help >/dev/null; then
+    echo "Install DMG build tools from $dmg_layout/requirements.txt and set DMGBUILD_PYTHON." >&2
+    exit 1
+fi
 
 sw_vers
 uname -m
@@ -99,13 +105,16 @@ codesign --force --sign - --timestamp=none "$app"
 codesign -d --verbose=4 "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 
-ln -s /Applications "$staging/Applications"
-hdiutil create -srcfolder "$staging" -volname "$name" -fs HFS+ -format UDZO "$work/$dmg"
+xcrun swift "$dmg_layout/background.swift" "$work"
+"$dmg_python" -m dmgbuild -s "$dmg_layout/layout.py" \
+    -D "app=$app" -D "background=$work/background.png" "$name" "$work/$dmg"
 hdiutil verify "$work/$dmg"
 mkdir "$mount"
 hdiutil attach "$work/$dmg" -readonly -nobrowse -mountpoint "$mount"
 mounted=true
 ls -la "$mount"
+"$dmg_python" "$dmg_layout/verify.py" "$mount" "$app" "$dmg_layout/layout.py"
+/usr/bin/tiffutil -info "$mount/.background.tiff"
 [[ $(readlink "$mount/Applications") == /Applications ]]
 diff -r "$app" "$mount/$bundle"
 codesign --verify --deep --strict --verbose=2 "$mount/$bundle"

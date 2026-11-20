@@ -1,5 +1,7 @@
 # MAC-04 — упаковка Find a Note для Apple Silicon
 
+Актуальный сценарий сборки оформленного образа описан в [MAC-04A](MAC-04A-DMG-DESIGN.md).
+
 Сборка 0.3.0 использует общий Go/Wails/React-проект. Bundle ID
 `io.github.pembrock.findanote` и origin `wails://wails/` удерживают
 существующий профиль WKWebView при переносе и ручном обновлении.
