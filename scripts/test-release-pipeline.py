@@ -114,6 +114,19 @@ class ReleasePipelineTest(unittest.TestCase):
                     release.prepare(self.api, self.args)
         self.api.download.assert_not_called()
 
+    def test_download_media_types(self):
+        api = release.GitHub()
+        routes = [
+            ("/actions/artifacts/99/zip", "application/vnd.github+json"),
+            ("/releases/assets/99", "application/octet-stream"),
+        ]
+        for route, accept in routes:
+            with self.subTest(route=route), patch.object(api.opener, "open", return_value=io.BytesIO(b"zip")) as open_url:
+                target = self.root / accept.split("/")[1]
+                api.download(route, target, 3)
+                self.assertEqual(open_url.call_args.args[0].get_header("Accept"), accept)
+                self.assertEqual(target.read_bytes(), b"zip")
+
     def test_network_failure(self):
         self.api.download.side_effect = URLError("offline")
         with self.assertRaises(URLError):
