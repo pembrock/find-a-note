@@ -129,3 +129,9 @@
   border-radius: 10px;
   font-size: 13px;
 }
+
+.update-digest {
+  user-select: text;
+  -webkit-user-select: text;
+  overflow-wrap: anywhere;
+}

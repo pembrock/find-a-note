@@ -23,13 +23,15 @@ func PublicKey() ed25519.PublicKey {
 }
 
 type Status struct {
-	Phase    string `json:"phase"`
-	Version  string `json:"version"`
-	Notes    string `json:"notes"`
-	Progress int    `json:"progress"`
-	Received int64  `json:"received"`
-	Total    int64  `json:"total"`
-	Problem  string `json:"problem"`
+	Phase          string `json:"phase"`
+	Version        string `json:"version"`
+	Notes          string `json:"notes"`
+	Progress       int    `json:"progress"`
+	Received       int64  `json:"received"`
+	Total          int64  `json:"total"`
+	Problem        string `json:"problem"`
+	Manual         bool   `json:"manual,omitempty"`
+	VerifiedSHA256 string `json:"verifiedSHA256,omitempty"`
 }
 
 type Job struct {
@@ -103,7 +105,11 @@ func (s *Service) checkOnce(background bool) {
 		return
 	}
 	switch s.state.Phase {
-	case "unsupported", "checking", "downloading", "ready", "installing", "install-error":
+	case "unsupported", "checking", "downloading", "installing", "install-error":
+		s.mu.Unlock()
+		return
+	}
+	if s.state.Phase == "ready" && !s.state.Manual {
 		s.mu.Unlock()
 		return
 	}
@@ -153,7 +159,7 @@ func (s *Service) check(ctx context.Context) (Status, Job) {
 	if !ok || release.Assets[p.Name] != p.Size {
 		return Status{Phase: "unavailable"}, Job{}
 	}
-	return Status{Phase: "available", Version: m.Version, Notes: m.Notes}, Job{Manifest: raw, Signature: signature, Package: p}
+	return Status{Phase: "available", Version: m.Version, Notes: m.Notes, Manual: p.OS == "darwin"}, Job{Manifest: raw, Signature: signature, Package: p}
 }
 
 func readAsset(ctx context.Context, p UpdateProvider, version Version, name string, limit int64) ([]byte, error) {
@@ -183,7 +189,15 @@ func (s *Service) Download() {
 	s.state.Received, s.state.Total, s.state.Problem = 0, p.Size, ""
 	s.mu.Unlock()
 
-	dir, file, err := s.download(ctx, version, p)
+	var dir, file string
+	var err error
+	if p.OS == "darwin" {
+		// Verify the served bytes without writing a launchable image. The browser
+		// handles the user's copy and its normal quarantine policy.
+		err = s.receive(ctx, version, p, io.Discard)
+	} else {
+		dir, file, err = s.download(ctx, version, p)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	canceled := errors.Is(ctx.Err(), context.Canceled)
@@ -202,6 +216,9 @@ func (s *Service) Download() {
 	}
 	s.cache, s.job.File = dir, file
 	s.state.Phase, s.state.Progress = "ready", 100
+	if s.state.Manual {
+		s.state.VerifiedSHA256 = p.SHA256
+	}
 }
 
 func (s *Service) download(ctx context.Context, version Version, p Package) (string, string, error) {
@@ -215,9 +232,20 @@ func (s *Service) download(ctx context.Context, version Version, p Package) (str
 		return dir, "", err
 	}
 	defer dst.Close()
+	err = s.receive(ctx, version, p, dst)
+	if err == nil {
+		err = dst.Sync()
+	}
+	if err == nil {
+		err = dst.Close()
+	}
+	return dir, file, err
+}
+
+func (s *Service) receive(ctx context.Context, version Version, p Package, dst io.Writer) error {
 	src, err := s.provider.Open(ctx, version, p.Name)
 	if err != nil {
-		return dir, "", err
+		return err
 	}
 	defer src.Close()
 	progress := &progressWriter{file: dst, ctx: ctx, report: func(written int64) {
@@ -226,14 +254,7 @@ func (s *Service) download(ctx context.Context, version Version, p Package) (str
 		s.state.Progress = min(99, int(written*100/p.Size))
 		s.mu.Unlock()
 	}}
-	err = p.ValidateStream(io.TeeReader(src, progress))
-	if err == nil {
-		err = dst.Sync()
-	}
-	if err == nil {
-		err = dst.Close()
-	}
-	return dir, file, err
+	return p.ValidateStream(io.TeeReader(src, progress))
 }
 
 type progressWriter struct {
@@ -263,12 +284,13 @@ func (s *Service) Cancel() {
 		_ = os.RemoveAll(s.cache)
 		s.cache, s.job.File = "", ""
 		s.state.Phase, s.state.Progress = "available", 0
+		s.state.VerifiedSHA256 = ""
 	}
 }
 
 func (s *Service) Install() bool {
 	s.mu.Lock()
-	if s.state.Phase != "ready" && s.state.Phase != "install-error" {
+	if s.state.Manual || (s.state.Phase != "ready" && s.state.Phase != "install-error") {
 		s.mu.Unlock()
 		return false
 	}

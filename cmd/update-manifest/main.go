@@ -24,15 +24,16 @@ import (
 func main() {
 	key := flag.String("key", "", "path to the release owner's external PKCS#8 Ed25519 PEM")
 	version := flag.String("version", "", "version from wails.json")
-	dir := flag.String("dir", "", "directory of the Windows release assets")
+	dir := flag.String("dir", "", "directory of the release assets")
 	notes := flag.String("notes", "", "optional UTF-8 release summary")
+	macOS := flag.Bool("macos", false, "include the matching macOS arm64 DMG")
 	flag.Parse()
-	if err := sign(*key, *version, *dir, *notes); err != nil {
+	if err := sign(*key, *version, *dir, *notes, *macOS); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func sign(keyPath, version, dir, notesPath string) error {
+func sign(keyPath, version, dir, notesPath string, macOS bool) error {
 	if keyPath == "" || dir == "" {
 		return errors.New("-key and -dir are required")
 	}
@@ -44,32 +45,9 @@ func sign(keyPath, version, dir, notesPath string) error {
 		return err
 	}
 	defer clear(private)
-	m := update.Manifest{Schema: 1, Product: "find-a-note", Version: version}
-	if notesPath != "" {
-		notes, err := os.ReadFile(notesPath)
-		if err != nil {
-			return err
-		}
-		if !utf8.Valid(notes) {
-			return errors.New("release notes must be UTF-8")
-		}
-		m.Notes = string(notes)
-	}
-	for _, p := range []update.Package{
-		{OS: "windows", Arch: "amd64", Kind: "installer", Name: "Find-a-Note-" + version + "-Windows-Setup.exe", Method: "nsis-stage-v1"},
-		{OS: "windows", Arch: "amd64", Kind: "portable", Name: "Find-a-Note-" + version + "-Windows-Portable.exe", Method: "replace-exe"},
-	} {
-		f, err := os.Open(filepath.Join(dir, p.Name))
-		if err != nil {
-			return err
-		}
-		hash := sha256.New()
-		p.Size, err = io.Copy(hash, f)
-		if err := errors.Join(err, f.Close()); err != nil {
-			return err
-		}
-		p.SHA256 = hex.EncodeToString(hash.Sum(nil))
-		m.Packages = append(m.Packages, p)
+	m, err := releaseManifest(version, dir, notesPath, macOS)
+	if err != nil {
+		return err
 	}
 	data, err := update.CanonicalManifest(m)
 	if err != nil {
@@ -87,6 +65,41 @@ func sign(keyPath, version, dir, notesPath string) error {
 		return err
 	}
 	return nil
+}
+
+func releaseManifest(version, dir, notesPath string, macOS bool) (update.Manifest, error) {
+	m := update.Manifest{Schema: 1, Product: "find-a-note", Version: version}
+	if notesPath != "" {
+		notes, err := os.ReadFile(notesPath)
+		if err != nil {
+			return m, err
+		}
+		if !utf8.Valid(notes) {
+			return m, errors.New("release notes must be UTF-8")
+		}
+		m.Notes = string(notes)
+	}
+	packages := []update.Package{
+		{OS: "windows", Arch: "amd64", Kind: "installer", Name: "Find-a-Note-" + version + "-Windows-Setup.exe", Method: "nsis-stage-v1"},
+		{OS: "windows", Arch: "amd64", Kind: "portable", Name: "Find-a-Note-" + version + "-Windows-Portable.exe", Method: "replace-exe"},
+	}
+	if macOS {
+		packages = append(packages, update.MacOSDMG(version))
+	}
+	for _, p := range packages {
+		f, err := os.Open(filepath.Join(dir, p.Name))
+		if err != nil {
+			return m, err
+		}
+		hash := sha256.New()
+		p.Size, err = io.Copy(hash, f)
+		if err := errors.Join(err, f.Close()); err != nil {
+			return m, err
+		}
+		p.SHA256 = hex.EncodeToString(hash.Sum(nil))
+		m.Packages = append(m.Packages, p)
+	}
+	return m, nil
 }
 
 func loadKey(path string) (ed25519.PrivateKey, error) {

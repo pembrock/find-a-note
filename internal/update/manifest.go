@@ -152,3 +152,17 @@ func WindowsPackage(m Manifest, kind string) (Package, bool) {
 		return Package{}, false
 	}
 }
+
+// MacOSDMG describes the versioned asset for manual updates on Apple Silicon.
+func MacOSDMG(version string) Package {
+	return Package{
+		OS: "darwin", Arch: "arm64", Kind: "dmg", Method: "manual-dmg",
+		Name: "Find-a-Note-" + version + "-macOS-arm64.dmg",
+	}
+}
+
+func MacOSPackage(m Manifest) (Package, bool) {
+	expected := MacOSDMG(m.Version)
+	p, ok := m.Find(expected.OS, expected.Arch, expected.Kind)
+	return p, ok && p.Name == expected.Name && p.Method == expected.Method
+}

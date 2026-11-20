@@ -7,6 +7,7 @@ import {
 // SPDX-License-Identifier: GPL-3.0-only
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { info as product } from "../../wails.json";
+import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 import "./updates.css";
 
 type Status = {
@@ -17,6 +18,8 @@ type Status = {
   received: number;
   total: number;
   problem: string;
+  manual?: boolean;
+  verifiedSHA256?: string;
 };
 type Action = "Check" | "Download" | "Install";
 type Bridge = {
@@ -56,7 +59,9 @@ function sameStatus(a: Status, b: Status) {
     a.progress === b.progress &&
     a.received === b.received &&
     a.total === b.total &&
-    a.problem === b.problem
+    a.problem === b.problem &&
+    a.manual === b.manual &&
+    a.verifiedSHA256 === b.verifiedSHA256
   );
 }
 
@@ -172,13 +177,10 @@ export function useUpdates() {
     check: () => {
       setOpen(true);
       if (
-        ![
-          "checking",
-          "downloading",
-          "ready",
-          "installing",
-          "install-error",
-        ].includes(phase)
+        !["checking", "downloading", "installing", "install-error"].includes(
+          phase,
+        ) &&
+        (phase !== "ready" || status.manual)
       ) {
         void run("Check");
       }
@@ -226,6 +228,8 @@ export function UpdateDialog({
   const heading = useRef<HTMLHeadingElement>(null);
   const { status, phase, open, cancelling, close, run } = update;
   const notes = localizedNotes(status.notes, language);
+  const manualReady =
+    phase === "ready" && status.manual && status.verifiedSHA256;
   const [confirm, setConfirm] = useState(false);
 
   useLayoutEffect(() => {
@@ -283,7 +287,7 @@ export function UpdateDialog({
           </p>
         </div>
         <div className="update-body">
-          {phase === "available" && (
+          {(phase === "available" || manualReady) && (
             <>
               <p className="update-muted">
                 {t("installed-version", { version: product.productVersion })}
@@ -326,7 +330,16 @@ export function UpdateDialog({
               </p>
             </>
           )}
-          {phase === "ready" && (
+          {manualReady && (
+            <>
+              <p>{t("update-manual-explainer")}</p>
+              <p className="update-muted">
+                SHA-256{" "}
+                <code className="update-digest">{status.verifiedSHA256}</code>
+              </p>
+            </>
+          )}
+          {phase === "ready" && !status.manual && (
             <p>
               {confirm
                 ? t("update-restart-confirmation")
@@ -356,14 +369,28 @@ export function UpdateDialog({
                 className="update-primary"
                 onClick={() => void run("Download")}
               >
-                {t("update")}
+                {t(status.manual ? "update-verify-dmg" : "update")}
               </button>
             </>
           ) : phase === "downloading" ? (
             <button disabled={cancelling} onClick={update.cancelDownload}>
               {t("cancel")}
             </button>
-          ) : phase === "ready" ? (
+          ) : manualReady ? (
+            <>
+              <button onClick={dismiss}>{t("close")}</button>
+              <button
+                className="update-primary"
+                onClick={() =>
+                  BrowserOpenURL(
+                    `https://github.com/pembrock/find-a-note/releases/tag/v${status.version}`,
+                  )
+                }
+              >
+                {t("update-open-release")}
+              </button>
+            </>
+          ) : phase === "ready" && !status.manual ? (
             confirm ? (
               <>
                 <button onClick={() => setConfirm(false)}>{t("back")}</button>

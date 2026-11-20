@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "product": "find-a-note",
+  "version": "0.3.1",
+  "notes": "English\n\n- Release notes\n\nРусский\n\n- Заметки о выпуске",
+  "packages": [
+    {
+      "os": "windows",
+      "arch": "amd64",
+      "kind": "installer",
+      "name": "Find-a-Note-0.3.1-Windows-Setup.exe",
+      "size": 34,
+      "sha256": "ffb6f4b7e9ac184312da65c0704776b8f632bbf2a905b166da1274b9247e47bb",
+      "method": "nsis-stage-v1"
+    },
+    {
+      "os": "windows",
+      "arch": "amd64",
+      "kind": "portable",
+      "name": "Find-a-Note-0.3.1-Windows-Portable.exe",
+      "size": 33,
+      "sha256": "26fe3640a8c2e74c8ba48144be5425aa5e510983ecc9ebc57746a9deef54f696",
+      "method": "replace-exe"
+    },
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "kind": "dmg",
+      "name": "Find-a-Note-0.3.1-macOS-arm64.dmg",
+      "size": 28,
+      "sha256": "2f6054410a5e9ac29decdd16e6ac0e4dcae3466053aef2d2828b61675de81356",
+      "method": "manual-dmg"
+    }
+  ]
+}

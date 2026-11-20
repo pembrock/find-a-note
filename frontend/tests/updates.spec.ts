@@ -11,10 +11,11 @@ async function launch(
     notice = "",
     notes = "Улучшено окно обновления.",
     total = 12 * 1024 ** 2,
+    manual = false,
   } = {},
 ) {
   await page.addInitScript(
-    ({ phase, result, notice, notes, total }) => {
+    ({ phase, result, notice, notes, total, manual }) => {
       const offer = {
         version: "0.3.1",
         notes,
@@ -22,10 +23,12 @@ async function launch(
         received: 0,
         total: 0,
         problem: "",
+        manual,
       };
       const statusFor = (phase: string) => ({
         ...offer,
         phase,
+        verifiedSHA256: phase === "ready" && manual ? "a".repeat(64) : "",
         version: ["idle", "checking", "current", "check-error"].includes(phase)
           ? ""
           : offer.version,
@@ -34,6 +37,7 @@ async function launch(
       let finish = () => {};
       let finishCheck = () => {};
       const control = {
+        url: "",
         checks: 0,
         installs: 0,
         cancels: 0,
@@ -48,6 +52,7 @@ async function launch(
       };
       Object.assign(window, {
         updateTest: control,
+        ...(manual && { runtime: { BrowserOpenURL: (url: string) => { control.url = url; } } }),
         go: {
           main: {
             UpdateBridge: {
@@ -89,7 +94,7 @@ async function launch(
         },
       });
     },
-    { phase, result, notice, notes, total },
+    { phase, result, notice, notes, total, manual },
   );
   await page.goto("/");
 }
@@ -337,3 +342,24 @@ for (const [width, height] of [
     }
   });
 }
+
+test("manual macOS update verifies the DMG before opening GitHub and offers no install", async ({ page }) => {
+  await launch(page, { manual: true, notes: "English\n\n- English notes\n\nРусский\n\n- Русские заметки" });
+  await badgeFor(page).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("region")).toHaveText("- Русские заметки");
+  const verify = dialog.getByRole("button", { name: "Проверить DMG" });
+  await expect(dialog.getByRole("button", { name: "Открыть релиз GitHub" })).toHaveCount(0);
+  await verify.click();
+  await expect(dialog.getByRole("progressbar")).toBeVisible();
+  await page.evaluate(() => (window as any).updateTest.done("ready"));
+  await expect(dialog.getByText("a".repeat(64))).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Язык приложения" }).selectOption("en");
+  await expect(dialog.getByRole("region")).toHaveText("- English notes");
+  await expect(dialog.getByRole("button", { name: /restart|install/i })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Open GitHub release" }).click();
+  expect(await page.evaluate(() => (window as any).updateTest.url)).toBe(
+    "https://github.com/pembrock/find-a-note/releases/tag/v0.3.1",
+  );
+  expect(await page.evaluate(() => (window as any).updateTest.installs)).toBe(0);
+});
