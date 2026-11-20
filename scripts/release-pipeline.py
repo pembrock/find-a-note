@@ -77,7 +77,10 @@ class GitHub:
         raise ValueError("GitHub pagination limit reached")
 
     def download(self, route, destination, limit, *, public=False):
-        with self.request(route, binary=True, public=public) as response, destination.open("xb") as out:
+        # Only the Release assets API uses content negotiation to return bytes.
+        # The Actions archive API responds with a redirect for the JSON media type.
+        binary = route.startswith("/releases/assets/")
+        with self.request(route, binary=binary, public=public) as response, destination.open("xb") as out:
             size = 0
             while block := response.read(1024 * 1024):
                 size += len(block)
