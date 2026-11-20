@@ -30,9 +30,12 @@ type Status struct {
 	Received       int64  `json:"received"`
 	Total          int64  `json:"total"`
 	Problem        string `json:"problem"`
+	MacOS          bool   `json:"macOS,omitempty"`
 	Manual         bool   `json:"manual,omitempty"`
 	VerifiedSHA256 string `json:"verifiedSHA256,omitempty"`
 }
+
+var errUpdatePending = errors.New("a macOS update is already pending")
 
 type Job struct {
 	Manifest  []byte
@@ -159,7 +162,8 @@ func (s *Service) check(ctx context.Context) (Status, Job) {
 	if !ok || release.Assets[p.Name] != p.Size {
 		return Status{Phase: "unavailable"}, Job{}
 	}
-	return Status{Phase: "available", Version: m.Version, Notes: m.Notes, Manual: p.OS == "darwin"}, Job{Manifest: raw, Signature: signature, Package: p}
+	automatic, _ := s.launcher.(interface{ AutomaticDMG() bool })
+	return Status{Phase: "available", Version: m.Version, Notes: m.Notes, MacOS: p.OS == "darwin", Manual: p.OS == "darwin" && (automatic == nil || !automatic.AutomaticDMG())}, Job{Manifest: raw, Signature: signature, Package: p}
 }
 
 func readAsset(ctx context.Context, p UpdateProvider, version Version, name string, limit int64) ([]byte, error) {
@@ -186,12 +190,13 @@ func (s *Service) Download() {
 	s.state.Phase, s.state.Progress = "downloading", 0
 	version, _ := ParseVersion(s.state.Version)
 	p := s.job.Package
+	manual := s.state.Manual
 	s.state.Received, s.state.Total, s.state.Problem = 0, p.Size, ""
 	s.mu.Unlock()
 
 	var dir, file string
 	var err error
-	if p.OS == "darwin" {
+	if manual {
 		// Verify the served bytes without writing a launchable image. The browser
 		// handles the user's copy and its normal quarantine policy.
 		err = s.receive(ctx, version, p, io.Discard)
@@ -316,6 +321,8 @@ func updateProblem(err error, fallback string) string {
 		return "space"
 	case errors.Is(err, os.ErrPermission):
 		return "permission"
+	case errors.Is(err, errUpdatePending):
+		return "pending"
 	case errors.Is(err, errPackageIntegrity):
 		return "integrity"
 	default:

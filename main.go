@@ -44,6 +44,7 @@ func main() {
 	configurePlatform(appOptions)
 	err = wails.Run(appOptions)
 	if err != nil {
+		update.ReportStartupFailure()
 		log.Fatal(err)
 	}
 }
