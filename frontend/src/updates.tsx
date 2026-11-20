@@ -333,6 +333,7 @@ export function UpdateDialog({
           {manualReady && (
             <>
               <p>{t("update-manual-explainer")}</p>
+              <p className="update-muted">{t("update-macos-gatekeeper")}</p>
               <p className="update-muted">
                 SHA-256{" "}
                 <code className="update-digest">{status.verifiedSHA256}</code>

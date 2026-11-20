@@ -354,8 +354,10 @@ test("manual macOS update verifies the DMG before opening GitHub and offers no i
   await expect(dialog.getByRole("progressbar")).toBeVisible();
   await page.evaluate(() => (window as any).updateTest.done("ready"));
   await expect(dialog.getByText("a".repeat(64))).toBeVisible();
+  await expect(dialog.getByText(/Всё равно открыть/)).toBeVisible();
   await dialog.getByRole("combobox", { name: "Язык приложения" }).selectOption("en");
   await expect(dialog.getByRole("region")).toHaveText("- English notes");
+  await expect(dialog.getByText(/Open Anyway/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: /restart|install/i })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Open GitHub release" }).click();
   expect(await page.evaluate(() => (window as any).updateTest.url)).toBe(

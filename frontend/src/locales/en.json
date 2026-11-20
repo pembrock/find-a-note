@@ -134,6 +134,7 @@
   "update-verify-dmg": "Verify DMG",
   "update-open-release": "Open GitHub release",
   "update-manual-explainer": "Download the arm64 DMG from the release and compare its SHA-256 with the verified value below. Quit Find a Note, then open the matching DMG and replace the app in Applications.",
+  "update-macos-gatekeeper": "macOS may block the new version on first launch. After verifying the download, you can review the warning in System Settings → Privacy & Security. If macOS offers Open Anyway, decide whether to allow this copy. Keep the previous version until the new one opens.",
   "update-ready-explainer": "The update was downloaded and verified. Restart to finish installing it.",
   "update": "Update",
   "back": "Back",
