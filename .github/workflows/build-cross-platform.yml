@@ -76,8 +76,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install nsis --version=$env:NSIS_VERSION --allow-downgrade --yes --no-progress
-          if ($LASTEXITCODE -ne 0) { throw 'NSIS installation failed.' }
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            choco install nsis --version=$env:NSIS_VERSION --allow-downgrade --yes --no-progress
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 3) { throw 'NSIS installation failed after three attempts.' }
+            Write-Warning "NSIS installation attempt $attempt failed. Retrying in 15 seconds."
+            Start-Sleep -Seconds 15
+          }
           $nsis = @(
             "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
             "$env:ProgramFiles\NSIS\makensis.exe"
