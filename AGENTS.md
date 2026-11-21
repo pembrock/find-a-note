@@ -74,6 +74,9 @@ secret values, access to credentials, or user preferences.
   DMGs, ZIPs, and profiles. Preserve existing historical data unless the owner
   separately approves its removal. Leave the production signing key and active
   user profiles untouched. Create separate releases only at the owner's direction.
+- Use `build/bin/Find a Note Test.exe` for the current Windows manual test
+  build. Reuse that path across tasks and replace the file only when a new
+  build is needed.
 - Preserve user changes and review staged content before committing. Keep local
   files out of commits until reviewed. Modify, delete, or publish the user’s
   `promo/` directory only on explicit request.
@@ -99,7 +102,7 @@ npm.cmd run test:ui
 Pop-Location
 go test ./...
 go vet ./...
-wails build -platform windows/amd64
+wails build -platform windows/amd64 -o "Find a Note Test.exe"
 ```
 
 Changes affecting both platforms require a successful [Cross-platform build](docs/ci/CI-01-CROSS-PLATFORM-BUILD.md)
