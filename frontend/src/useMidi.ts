@@ -48,6 +48,10 @@ export function useMidi(
   const [state, setState] = useState(initial);
   const [pending, setPending] = useState(false);
   const [last, setLast] = useState<MIDIEvent | null>(null);
+  // The connection session identifies the device. Each pitch tracks its channels.
+  const [heldNotes, setHeldNotes] = useState<ReadonlyMap<number, number>>(
+    () => new Map(),
+  );
   const [warning, setWarning] = useState<MessageKey | "">("");
   const current = useRef(initial);
   const callback = useRef(onNote);
@@ -61,27 +65,32 @@ export function useMidi(
   const switching = useRef(false);
   const desired = useRef<string | null>(null);
   const backend = window.go?.main?.App;
+  function clearNotes() {
+    stop.current();
+    setLast(null);
+    setHeldNotes((notes) => (notes.size ? new Map() : notes));
+  }
   function apply(next: MIDIState) {
     if (!alive.current || next.revision < current.current.revision) return;
     if (
       next.session !== current.current.session ||
       next.status !== "connected"
     ) {
-      stop.current();
-      setLast(null);
+      clearNotes();
     }
     current.current = next;
     setState(next);
   }
   function bindingError() {
-    stop.current();
+    if (!alive.current) return;
+    clearNotes();
     const next = {
       ...current.current,
       status: "error",
       message: "midi-bridge-error",
     };
     current.current = next;
-    if (alive.current) setState(next);
+    setState(next);
   }
   useEffect(() => {
     alive.current = true;
@@ -146,7 +155,18 @@ export function useMidi(
       )
         return;
       audioCallback.current(event);
-      if (event.type !== "noteon" || event.velocity === 0) return;
+      const down = event.type === "noteon" && event.velocity > 0;
+      const channel = 1 << (event.channel - 1);
+      setHeldNotes((notes) => {
+        const previous = notes.get(event.note) ?? 0;
+        const channels = down ? previous | channel : previous & ~channel;
+        if (channels === previous) return notes;
+        const next = new Map(notes);
+        if (channels) next.set(event.note, channels);
+        else next.delete(event.note);
+        return next;
+      });
+      if (!down) return;
       setLast(event);
       callback.current({
         note: event.note,
@@ -191,9 +211,8 @@ export function useMidi(
     busy.current = true;
     desired.current = device?.identity || null;
     switching.current = true;
-    stop.current();
+    clearNotes();
     setPending(true);
-    setLast(null);
     setWarning("");
     try {
       localStorage.setItem(
@@ -230,5 +249,5 @@ export function useMidi(
       if (alive.current) setPending(false);
     }
   }
-  return { state, pending, last, warning, select, refresh };
+  return { state, pending, last, heldNotes, warning, select, refresh };
 }

@@ -109,7 +109,8 @@ async function installMIDI(
           velocity = 100,
           type = "noteon",
           session = state.session,
-        ) => emit("midi:note", { note, velocity, type, session, channel: 1 }),
+          channel = 1,
+        ) => emit("midi:note", { note, velocity, type, session, channel }),
         remove: () => {
           state = {
             ...state,
@@ -161,13 +162,89 @@ async function send(
   velocity = 100,
   type = "noteon",
   session?: string,
+  channel = 1,
 ) {
   await page.evaluate(
-    ({ note, velocity, type, session }) =>
-      (window as any).__midi.send(note, velocity, type, session),
-    { note, velocity, type, session },
+    ({ note, velocity, type, session, channel }) =>
+      (window as any).__midi.send(note, velocity, type, session, channel),
+    { note, velocity, type, session, channel },
   );
 }
+
+test("MIDI chord stays pressed until individual keys are released", async ({ page }) => {
+  await installMIDI(page, { preferred: "piano-0", custom: true });
+  await page.goto("/");
+  await expect(page.locator(".midi-connected")).toBeVisible();
+  await page.clock.install();
+  const pressed = page.locator(".piano .pressed");
+  const held = async (notes: number[]) => {
+    await expect(pressed).toHaveCount(notes.length);
+    for (const note of notes) {
+      await expect(
+        pressed.and(page.locator(`[data-midi="${note}"]`)),
+      ).toHaveCount(1);
+    }
+  };
+  await send(page, 60);
+  await held([60]);
+  await expect(pressed).toHaveClass(/answer-correct/);
+  await send(page, 64);
+  await held([60, 64]);
+  await send(page, 67);
+  await send(page, 64);
+  await page.clock.runFor(200);
+  await held([60, 64, 67]);
+  await send(page, 64, 100, "noteon", undefined, 16);
+  await send(page, 64, 0);
+  await send(page, 64, 0, "noteoff");
+  await held([60, 64, 67]);
+  await send(page, 64, 0, "noteoff", undefined, 16);
+  await held([60, 67]);
+  await page.locator('.piano [data-midi="60"]').click();
+  await page.locator('.piano [data-midi="62"]').click();
+  await held([60, 62, 67]);
+  await page.clock.runFor(1001);
+  await expect(page.locator(".answer-correct")).toHaveCount(0);
+  await held([60, 67]);
+  await send(page, 60, 0, "noteoff");
+  await send(page, 67, 0);
+  await held([]);
+
+  await page.evaluate(() => {
+    for (const note of [60, 64, 67]) (window as any).__midi.send(note);
+  });
+  await held([60, 64, 67]);
+  await page.evaluate(() => (window as any).__midi.remove());
+  await held([]);
+  await send(page, 60, 100, "noteon", "1");
+  await held([]);
+});
+
+test("held keys outside the exercise window are rendered across the MIDI range", async ({ page }) => {
+  await installMIDI(page, { preferred: "piano-0", custom: true });
+  await page.goto("/");
+  const device = page.getByRole("button", {
+    name: "Устройство ввода",
+    exact: true,
+  });
+  await expect(device).toContainText("Подключено (MIDI)");
+  for (const note of [0, 1, 61, 127]) await send(page, note);
+  await expect(page.locator(".piano .pressed")).toHaveCount(4);
+  for (const note of [0, 1, 61, 127]) {
+    await expect(
+      page.locator(`.piano .pressed[data-midi="${note}"]`),
+    ).toBeInViewport();
+  }
+  await expect(page.locator('.black-key.pressed[data-midi="1"]')).toHaveCount(1);
+  await device.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Test Piano 2" })
+    .click();
+  await expect(page.locator(".piano .pressed")).toHaveCount(0);
+  await send(page, 61);
+  await expect(page.locator('.black-key.pressed[data-midi="61"]')).toHaveCount(1);
+});
 
 test("physical MIDI shares feedback, counters, timer and stale-session protection with virtual input", async ({
   page,
@@ -200,6 +277,7 @@ test("physical MIDI shares feedback, counters, timer and stale-session protectio
   );
   await send(page, 21);
   await expect(page.locator(".errors")).toHaveText("Ошибки: 1");
+  await send(page, 21, 0, "noteoff");
   await expect(page.locator(".octaves")).toHaveText("C4–B5");
   await expect(page.locator(".note-names")).toBeEmpty();
   await send(page, 72); // Any octave accepts C5 for the target C4.

@@ -209,7 +209,7 @@ function App() {
   const [correct, setCorrect] = useState(0);
   const [wrong, setWrong] = useState(0);
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
-  const [pressed, setPressed] = useState<number | null>(null);
+  const [virtualPressed, setVirtualPressed] = useState<number | null>(null);
   const [keyOct, setKeyOct] = useState(() =>
     training.mode === "first" ? 4 : keyboardOctave(note, octave(note)),
   );
@@ -348,7 +348,7 @@ function App() {
     setFeedback(null);
     setCorrect(0);
     setWrong(0);
-    setPressed(null);
+    setVirtualPressed(null);
     setKeyFeedback(null);
     clearTimeout(release.current);
     if (!trainingPool(settings, target, instrument).length) return;
@@ -385,9 +385,11 @@ function App() {
       event.note > instrument.maximum
     )
       return;
-    setPressed(event.note);
-    clearTimeout(release.current);
-    release.current = setTimeout(() => setPressed(null), 160);
+    if (event.source === "virtual") {
+      setVirtualPressed(event.note);
+      clearTimeout(release.current);
+      release.current = setTimeout(() => setVirtualPressed(null), 160);
+    }
     if (locked.current || done) return;
     setKeyFeedback({
       note: event.note,
@@ -425,20 +427,30 @@ function App() {
     notationFor(note, s.clef, s.spelling).clef,
     s.spelling,
   );
+  const windowStart = 12 * (keyOct + 1);
+  let firstKey = Math.max(windowStart, pianoBounds.minimum);
+  let lastKey = Math.min(windowStart + 23, pianoBounds.maximum);
+  // Keep the exercise window and include any held keys beyond its edges.
+  for (const pitch of midi.heldNotes.keys()) {
+    if (pitch < firstKey || (pitch === firstKey && isBlack(pitch))) {
+      firstKey = Math.floor(pitch / 12) * 12;
+    }
+    if (pitch > lastKey) {
+      lastKey = Math.min(127, Math.floor(pitch / 12) * 12 + 11);
+    }
+  }
   const white = Array.from(
-    { length: 24 },
-    (_, i) => 12 * (keyOct + 1) + i,
-  ).filter(
-    (m) => m >= pianoBounds.minimum && m <= pianoBounds.maximum && !isBlack(m),
-  );
+    { length: Math.max(0, lastKey - firstKey + 1) },
+    (_, i) => firstKey + i,
+  ).filter((m) => !isBlack(m));
   const enabled = Number(s.letter) + Number(s.russian) + Number(s.staff);
-  function keyClass(midi: number) {
+  function keyClass(pitch: number) {
     return [
-      pressed === midi ? "pressed" : "",
-      keyHint && compatible && !rangeChanged && !done && midi === note
+      virtualPressed === pitch || midi.heldNotes.has(pitch) ? "pressed" : "",
+      keyHint && compatible && !rangeChanged && !done && pitch === note
         ? "hinted"
         : "",
-      keyFeedback?.note === midi
+      keyFeedback?.note === pitch
         ? keyFeedback.correct
           ? "answer-correct"
           : "answer-wrong"
@@ -942,7 +954,7 @@ function App() {
                       </span>
                     )}
                   </button>
-                  {isBlack(m + 1) && m + 1 <= pianoBounds.maximum && (
+                  {isBlack(m + 1) && m + 1 <= lastKey && (
                     <button
                       aria-label={describe(m + 1).letter}
                       data-midi={m + 1}

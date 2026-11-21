@@ -63,9 +63,17 @@ secret values, access to credentials, or user preferences.
   filenames or build constraints. Verify that changes to one platform preserve
   the other platform's behavior.
 - Run `git status --short --branch` before starting work. Start new feature
-  branches from current public `main`. Use one feature branch across both
-  machines, with [worktrees for isolation](docs/development/CROSS-PLATFORM-WORKFLOW.md)
-  when helpful. Keep platform fixes in reviewable commits within that branch.
+  branches from current public `main` in one primary checkout per platform.
+  Use the same feature branch across both machines. Create an additional
+  checkout or worktree only when isolation is genuinely necessary. Keep platform
+  fixes in reviewable commits within that branch.
+- Reuse existing tools, dependencies, and caches. Keep reproducible task
+  temporaries outside the repository or in one controlled temporary directory.
+  Remove the current task's unneeded temporary files after testing, and keep one
+  current native build for manual verification. Avoid redundant copies of EXEs,
+  DMGs, ZIPs, and profiles. Preserve existing historical data unless the owner
+  separately approves its removal. Leave the production signing key and active
+  user profiles untouched. Create separate releases only at the owner's direction.
 - Preserve user changes and review staged content before committing. Keep local
   files out of commits until reviewed. Modify, delete, or publish the user’s
   `promo/` directory only on explicit request.
@@ -84,7 +92,7 @@ for Playwright and starts a local Vite server.
 
 ```powershell
 Push-Location frontend
-npm.cmd ci
+# Run npm.cmd ci only if the existing dependencies are missing or incompatible.
 npm.cmd run build
 npm.cmd test
 npm.cmd run test:ui
@@ -161,5 +169,6 @@ script’s generated third-party notices. Do not change third-party licenses.
 Briefly share the plan before edits and report meaningful progress. Surface
 errors and skipped checks. Report the overall result as **PASS**, **FAIL**, or
 **BLOCKED**. Include test results, changed files, artifact paths when applicable,
-branch, HEAD, and Git status. List limitations and provide commands and scenarios
+branch, HEAD, Git status, artifacts created and removed, and project size before
+and after the task. List limitations and provide commands and scenarios
 for any checks still needed on the second platform.
