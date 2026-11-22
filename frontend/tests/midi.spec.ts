@@ -295,9 +295,9 @@ test("physical MIDI shares feedback, counters, timer and stale-session protectio
   await expect(menu.locator(".midi-diagnostic")).toContainText("MIDI 72");
   await page.clock.runFor(1201);
   await expect(page.locator(".letter")).toHaveCount(0);
-  const target = Number(
-    await page.locator(".staff svg").getAttribute("data-midi"),
-  );
+  const staff = page.locator(".staff svg");
+  const target = 62; // The seeded exercise advances from C4 to D4.
+  await expect(staff).toHaveAttribute("data-midi", String(target));
   await menu
     .getByRole("button", { name: "Test Piano 2", exact: false })
     .click();
@@ -324,8 +324,8 @@ test("physical MIDI shares feedback, counters, timer and stale-session protectio
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(device).toBeFocused();
-  const next = await page.locator(".staff svg").getAttribute("data-midi");
-  await page.locator(`.piano [data-midi="${next}"]`).click();
+  await expect(staff).toHaveAttribute("data-midi", "60");
+  await page.locator('.piano [data-midi="60"]').click();
   await expect(page.getByRole("progressbar")).toHaveAttribute(
     "aria-valuenow",
     "3",
