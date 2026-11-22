@@ -1,0 +1,7 @@
+{
+  "tag": "v0.4.2",
+  "setup": "https://github.com/pembrock/find-a-note/releases/download/v0.4.2/Find-a-Note-0.4.2-Windows-Setup.exe",
+  "portable": "https://github.com/pembrock/find-a-note/releases/download/v0.4.2/Find-a-Note-0.4.2-Windows-Portable.exe",
+  "mac": "https://github.com/pembrock/find-a-note/releases/download/v0.4.2/Find-a-Note-0.4.2-macOS-arm64.dmg",
+  "checksums": "https://github.com/pembrock/find-a-note/releases/download/v0.4.2/SHA256SUMS.txt"
+}

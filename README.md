@@ -1,8 +1,12 @@
 # Find a Note
 
-Find a Note is a desktop sight-reading trainer. See a note on the staff and play it on a physical MIDI keyboard or the on-screen piano. Practice and piano playback work offline after installation.
+Find a Note is an open-source piano sight-reading trainer for Windows 10 and 11 (x64) and macOS (Apple Silicon). See a note on the staff and play it on a physical MIDI keyboard or the on-screen piano. Practice and piano playback work offline after installation.
 
-![Find a Note showing an exercise, the virtual piano, and the About section](screenshots/release-01-about.jpg)
+[Official website](https://pembrock.github.io/find-a-note/) · [Download from GitHub Releases](https://github.com/pembrock/find-a-note/releases/latest)
+
+![First Notes exercise in Find a Note with the on-screen piano](website/site/assets/training.png)
+
+![Custom exercise with bass clef and notation settings](website/site/assets/practice.png)
 
 ## Features
 
